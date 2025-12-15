@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Модель для списков фильмов
+model Watchlist {
+  id          BigInt   @id @default(autoincrement())
+  user_id     String
+  movie_id    Int
+  movie_title String?
+  poster_path String?
+  status      String   // "watched" или "want_to_watch"
+  created_at  DateTime @default(now())
+
+  @@index([user_id])
+}
+
+// Модель для пользователей (если нужно хранить дополнительно, но auth будет отдельно)
+model UserProfile {
+  id        String @id
+  email     String @unique
+  name      String?
+  created_at DateTime @default(now())
+}
