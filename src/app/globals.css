@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* Анимация shimmer для скелетона */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.animate-shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+  background-image: linear-gradient(to right, #1f2937 0%, #374151 50%, #1f2937 100%);
+}
