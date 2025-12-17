@@ -1,13 +1,34 @@
+/* Глобальные отступы для улучшения читаемости */
 @import "tailwindcss";
 
-/* Анимация shimmer для скелетона */
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+html {
+  scroll-behavior: smooth;
 }
 
-.animate-shimmer {
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite linear;
-  background-image: linear-gradient(to right, #1f2937 0%, #374151 50%, #1f2937 100%);
+body {
+  padding: 0;
+  margin: 0;
+}
+
+/* Кастомные классы для контейнеров */
+.content-container {
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .content-container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .content-container {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
 }
