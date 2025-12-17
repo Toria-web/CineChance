@@ -1,26 +1,18 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { Providers } from "./ClientProvider";
-
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata: Metadata = {
-  title: "CineChance",
-  description: "КиноТрекер",
-};
+import Sidebar from './components/Sidebar';
+// ... остальные импорты
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="ru">
-      <body className={inter.className}>
-        <Providers>
+      <body className="bg-gray-900 text-white min-h-screen">
+        <Sidebar />
+        <main className="md:ml-64"> {/* Отступ слева на десктопе для sidebar */}
           {children}
-        </Providers>
+        </main>
       </body>
     </html>
   );
