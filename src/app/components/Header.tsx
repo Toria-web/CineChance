@@ -8,7 +8,6 @@ type HeaderProps = {
 export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
   return (
     <header className="h-16 bg-black/90 backdrop-blur-md border-b border-gray-800 flex items-center justify-between w-full">
-      {/* Контейнер для содержимого хедера */}
       <div className="flex items-center justify-between w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-4">
           <button onClick={toggleSidebar} className="text-white text-2xl hover:text-purple-500 transition">
@@ -28,10 +27,7 @@ export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
           </div>
-
-          <button className="px-4 sm:px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full font-medium hover:brightness-110 transition shadow-lg whitespace-nowrap">
-            Вход
-          </button>
+          {/* Кнопка входа удалена - она теперь в сайдбаре */}
         </div>
       </div>
     </header>
