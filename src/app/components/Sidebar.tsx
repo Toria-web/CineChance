@@ -84,10 +84,8 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
           <ul className="space-y-2">
             {[
               ['/', 'Главная'],
-              ['/search', 'Поиск'],
               ['/lists', 'Мои списки'],
               ['/history', 'История просмотров'],
-              ['/favorites', 'Избранное'],
             ].map(([href, label]) => (
               <li key={href}>
                 <Link
@@ -127,18 +125,10 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
             <>
               <button
                 onClick={handleLogin}
-                className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:brightness-110 transition mb-3"
+                className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:brightness-110 transition"
               >
                 Войти
               </button>
-
-              <Link
-                href="/register"
-                onClick={() => window.innerWidth < 1024 && toggle()}
-                className="block text-center py-2 text-gray-400 hover:text-white transition text-sm"
-              >
-                Создать аккаунт
-              </Link>
             </>
           )}
         </div>
