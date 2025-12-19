@@ -1,4 +1,4 @@
-import { NextAuthOptions } from "next-auth";
+import { NextAuthOptions, getServerSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
@@ -124,3 +124,6 @@ export const authOptions: NextAuthOptions = {
   
   debug: process.env.NODE_ENV === "development",
 };
+
+// Экспортируем функцию для получения сессии на сервере
+export const getServerAuthSession = () => getServerSession(authOptions);

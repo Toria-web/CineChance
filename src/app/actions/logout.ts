@@ -1,13 +1,9 @@
-"use server";
+// src/app/actions/logout.ts
+'use server';
 
-import { signOut } from "@/auth";
+import { redirect } from "next/navigation";
 
-/**
- * Server Action для выхода пользователя
- * Безопасно для App Router
- */
 export async function logout() {
-  await signOut({
-    redirectTo: "/login",
-  });
+  // В NextAuth 4 серверный logout делается через redirect
+  redirect("/api/auth/signout?callbackUrl=/");
 }

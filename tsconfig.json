@@ -24,9 +24,8 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"],
+      "@/app/api/auth/[...nextauth]/*": ["./src/app/api/auth/[...nextauth]/*"]
     }
   },
   "include": [
