@@ -1,10 +1,13 @@
 // src/lib/tmdb.ts
-export interface Movie {
+export interface Media {
   id: number;
+  media_type: 'movie' | 'tv';
   title: string;
+  name?: string;
   poster_path: string | null;
   vote_average: number;
-  release_date: string;
+  release_date?: string;
+  first_air_date?: string;
   overview: string;
 }
 
@@ -16,22 +19,17 @@ if (!TMDB_API_KEY) {
   console.warn('⚠️ TMDB_API_KEY не найден! Проверьте .env.local');
 }
 
-export const fetchTrendingMovies = async (timeWindow: 'day' | 'week' = 'week'): Promise<Movie[]> => {
+export const fetchTrendingMovies = async (timeWindow: 'day' | 'week' = 'week'): Promise<Media[]> => {
   try {
     // Формируем URL с API ключом как параметром запроса
     const url = new URL(`${BASE_URL}/trending/movie/${timeWindow}`);
     url.searchParams.append('api_key', TMDB_API_KEY || '');
     url.searchParams.append('language', 'ru-RU');
     
-    // Отладочная информация
-    console.log('🔍 TMDB_API_KEY:', TMDB_API_KEY ? 'Загружен' : 'Отсутствует');
-    console.log('🔗 URL запроса:', url.toString());
-    
     const response = await fetch(url.toString(), {
       headers: {
         'accept': 'application/json',
       },
-      // Отключаем кэш для отладки
       cache: 'no-store',
     });
     
@@ -42,14 +40,27 @@ export const fetchTrendingMovies = async (timeWindow: 'day' | 'week' = 'week'): 
     }
     
     const data = await response.json();
-    return data.results || [];
+    // Преобразуем фильмы в общий формат Media
+    const movies: Media[] = (data.results || []).map((item: any) => ({
+      id: item.id,
+      media_type: 'movie',
+      title: item.title,
+      name: item.title,
+      poster_path: item.poster_path,
+      vote_average: item.vote_average,
+      release_date: item.release_date,
+      first_air_date: item.release_date,
+      overview: item.overview,
+    }));
+    
+    return movies;
   } catch (error) {
     console.error('❌ Сетевая ошибка при запросе к TMDB:', error);
     return [];
   }
 };
 
-export const fetchPopularMovies = async (page: number = 1): Promise<Movie[]> => {
+export const fetchPopularMovies = async (page: number = 1): Promise<Media[]> => {
   try {
     const url = new URL(`${BASE_URL}/movie/popular`);
     url.searchParams.append('api_key', TMDB_API_KEY || '');
@@ -68,18 +79,31 @@ export const fetchPopularMovies = async (page: number = 1): Promise<Movie[]> => 
     }
     
     const data = await response.json();
-    return data.results || [];
+    // Преобразуем фильмы в общий формат Media
+    const movies: Media[] = (data.results || []).map((item: any) => ({
+      id: item.id,
+      media_type: 'movie',
+      title: item.title,
+      name: item.title,
+      poster_path: item.poster_path,
+      vote_average: item.vote_average,
+      release_date: item.release_date,
+      first_air_date: item.release_date,
+      overview: item.overview,
+    }));
+    
+    return movies;
   } catch (error) {
     console.error('❌ Ошибка при запросе популярных фильмов:', error);
     return [];
   }
 };
 
-export const searchMovies = async (query: string, page: number = 1): Promise<Movie[]> => {
+export const searchMedia = async (query: string, page: number = 1): Promise<Media[]> => {
   if (!query.trim()) return [];
 
   try {
-    const url = new URL(`${BASE_URL}/search/movie`);
+    const url = new URL(`${BASE_URL}/search/multi`);
     url.searchParams.append('api_key', TMDB_API_KEY || '');
     url.searchParams.append('query', query.trim());
     url.searchParams.append('language', 'ru-RU');
@@ -87,7 +111,7 @@ export const searchMovies = async (query: string, page: number = 1): Promise<Mov
 
     const response = await fetch(url.toString(), {
       headers: { 'accept': 'application/json' },
-      next: { revalidate: 3600 }, // кэш на час
+      next: { revalidate: 3600 },
     });
 
     if (!response.ok) {
@@ -96,9 +120,28 @@ export const searchMovies = async (query: string, page: number = 1): Promise<Mov
     }
 
     const data = await response.json();
-    return data.results || [];
+    
+    // Фильтруем только фильмы и сериалы
+    const filteredResults = (data.results || []).filter(
+      (item: any) => item.media_type === 'movie' || item.media_type === 'tv'
+    );
+    
+    // Преобразуем в общий формат Media
+    const media: Media[] = filteredResults.map((item: any) => ({
+      id: item.id,
+      media_type: item.media_type,
+      title: item.title || item.name || 'Без названия',
+      name: item.name || item.title || 'Без названия',
+      poster_path: item.poster_path,
+      vote_average: item.vote_average,
+      release_date: item.release_date || item.first_air_date,
+      first_air_date: item.first_air_date || item.release_date,
+      overview: item.overview,
+    }));
+    
+    return media.slice(0, 30); // Ограничиваем 30 результатами
   } catch (error) {
-    console.error('Ошибка при поиске фильмов:', error);
+    console.error('Ошибка при поиске:', error);
     return [];
   }
 };

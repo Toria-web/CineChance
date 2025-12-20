@@ -1,5 +1,5 @@
 // src/app/search/page.tsx
-import { searchMovies } from '@/lib/tmdb';
+import { searchMedia } from '@/lib/tmdb';
 import MovieCard from '../components/MovieCard';
 import Link from 'next/link';
 
@@ -10,7 +10,7 @@ interface SearchPageProps {
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const query = params.q || '';
-  const movies = query ? await searchMovies(query) : [];
+  const media = query ? await searchMedia(query) : [];
 
   return (
     <div className="min-h-screen bg-gray-950 py-4">
@@ -18,11 +18,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         {/* Компактный заголовок */}
         <div className="mb-4 sm:mb-6">
           <h1 className="text-base sm:text-lg font-medium text-white inline">
-            {query ? `Поиск: "${query}"` : 'Поиск фильмов'}
+            {query ? `Поиск: "${query}"` : 'Поиск фильмов и сериалов'}
           </h1>
-          {query && movies.length > 0 && (
+          {query && media.length > 0 && (
             <span className="text-gray-400 text-sm ml-2">
-              ({movies.length} {movies.length === 1 ? 'результат' : movies.length < 5 ? 'результата' : 'результатов'})
+              ({media.length} {media.length === 1 ? 'результат' : media.length < 5 ? 'результата' : 'результатов'})
             </span>
           )}
         </div>
@@ -34,15 +34,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               ← На главную
             </Link>
           </div>
-        ) : movies.length > 0 ? (
+        ) : media.length > 0 ? (
           // Адаптивная сетка с надежными отступами
           <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
-            {movies.map((movie) => (
+            {media.map((item) => (
               <div 
-                key={movie.id} 
+                key={`${item.media_type}_${item.id}`} 
                 className="w-full min-w-0 p-1"
               >
-                <MovieCard movie={movie} />
+                <MovieCard movie={item} />
               </div>
             ))}
           </div>
