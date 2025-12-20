@@ -1,13 +1,14 @@
+// src/app/my-movies/MyMoviesClient.tsx
 'use client';
 
 import { useState } from 'react';
 import MovieCard from '../components/MovieCard';
-import { Movie } from '@/lib/tmdb';
+import { Media } from '@/lib/tmdb';
 
 export default function MyMoviesClient({
   initialMovies,
 }: {
-  initialMovies: Movie[];
+  initialMovies: Media[];
 }) {
   const [activeTab, setActiveTab] = useState<
     'watched' | 'wantToWatch' | 'dropped'
