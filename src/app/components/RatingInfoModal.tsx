@@ -1,44 +1,95 @@
 // src/app/components/RatingInfoModal.tsx
 'use client';
 
+import { useEffect, useRef } from 'react';
+
 interface RatingInfoModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   tmdbRating: number;
   cineChanceRating: number | null;
   position: { top: number; left: number } | null;
+  isMobile: boolean;
 }
 
 export default function RatingInfoModal({ 
   isOpen, 
   onClose, 
+  onMouseEnter,
+  onMouseLeave,
   tmdbRating, 
   cineChanceRating,
-  position 
+  position,
+  isMobile 
 }: RatingInfoModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Обработчик для закрытия при клике вне попапа (для мобильных)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isMobile && isOpen && modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    if (isOpen && isMobile) {
+      // Используем mousedown вместо touchstart, чтобы избежать конфликтов
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, isMobile, onClose]);
+
   if (!isOpen || !position) return null;
+
+  // Определяем, с какой стороны показывать стрелку
+  // Проверяем, с какой стороны экрана находится попап
+  const viewportWidth = window.innerWidth;
+  const isRightSide = position.left > viewportWidth / 2;
+  
+  // Ограничиваем позиционирование, чтобы попап не выходил за границы экрана
+  const popupWidth = 140;
+  const popupHeight = 80;
+  const margin = 10;
+  
+  let adjustedLeft = position.left;
+  let adjustedTop = position.top;
+  
+  // Проверяем границы по горизонтали
+  if (adjustedLeft < margin) {
+    adjustedLeft = margin;
+  } else if (adjustedLeft + popupWidth > viewportWidth - margin) {
+    adjustedLeft = viewportWidth - popupWidth - margin;
+  }
+  
+  // Проверяем границы по вертикали
+  if (adjustedTop < margin) {
+    adjustedTop = margin;
+  } else if (adjustedTop + popupHeight > window.innerHeight - margin) {
+    adjustedTop = window.innerHeight - popupHeight - margin;
+  }
 
   return (
     <>
-      {/* Backdrop для закрытия при клике вне */}
-      <div 
-        className="fixed inset-0 z-40"
-        onClick={onClose}
-      />
-      
       {/* Модальное окно */}
       <div 
-        className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 w-[180px]"
+        ref={modalRef}
+        className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-2.5 w-[140px]"
         style={{ 
-          top: position.top, 
-          left: position.left,
-          transform: 'translateX(-50%)'
+          top: `${adjustedTop}px`,
+          left: `${adjustedLeft}px`
         }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
       >
         {/* TMDB рейтинг */}
-        <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-700">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 relative">
+            <div className="w-4 h-4 relative">
               <img 
                 src="/images/logo_mini_lgt_pls_tmdb.png" 
                 alt="TMDB" 
@@ -60,8 +111,17 @@ export default function RatingInfoModal({
           </span>
         </div>
         
-        {/* Стрелочка снизу */}
-        <div className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-gray-900 border-r border-b border-gray-700 rotate-45" />
+        {/* Стрелочка сбоку */}
+        <div 
+          className={`absolute top-1/2 transform -translate-y-1/2 w-2.5 h-2.5 bg-gray-900 ${
+            isRightSide 
+              ? '-right-1 border-r border-t border-gray-700 rotate-45' 
+              : '-left-1 border-l border-b border-gray-700 -rotate-45'
+          }`}
+          style={{
+            [isRightSide ? 'right' : 'left']: '-6px'
+          }}
+        />
       </div>
     </>
   );

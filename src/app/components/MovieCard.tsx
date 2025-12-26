@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { Media } from '@/lib/tmdb';
 import RatingModal from './RatingModal';
+import RatingInfoModal from './RatingInfoModal';
 
 type MediaStatus = 'want' | 'watched' | 'dropped' | null;
 
@@ -21,15 +22,18 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
   const [isBlacklisted, setIsBlacklisted] = useState<boolean>(initialIsBlacklisted ?? false);
   const [isRemoved, setIsRemoved] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [watchedDate, setWatchedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isRatingInfoOpen, setIsRatingInfoOpen] = useState(false);
+  const [ratingInfoPosition, setRatingInfoPosition] = useState<{ top: number; left: number } | null>(null);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const posterRef = useRef<HTMLDivElement>(null);
-  const starRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const ratingRef = useRef<HTMLDivElement>(null);
+  const ratingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollListenerRef = useRef<boolean>(false);
 
   const imageUrl = movie.poster_path 
     ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
@@ -38,6 +42,8 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
   const title = movie.title || movie.name || 'Без названия';
   const date = movie.release_date || movie.first_air_date;
   const year = date ? date.split('-')[0] : '—';
+  
+  const cineChanceRating = movie.vote_average ? movie.vote_average + 0.5 : null;
 
   useEffect(() => {
     if (restoreView) {
@@ -47,7 +53,6 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
 
     const fetchData = async () => {
       try {
-        // If initialStatus wasn't provided, fetch watchlist status per-card
         if (initialStatus === undefined) {
           const statusRes = await fetch(`/api/watchlist?tmdbId=${movie.id}&mediaType=${movie.media_type}`);
           if (statusRes.ok) {
@@ -56,7 +61,6 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
           }
         }
 
-        // If initialIsBlacklisted wasn't provided, fall back to fetching blacklist
         if (initialIsBlacklisted === undefined) {
           const blacklistRes = await fetch(`/api/blacklist?tmdbId=${movie.id}&mediaType=${movie.media_type}`);
           if (blacklistRes.ok) {
@@ -93,6 +97,135 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
     if (showOverlay) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showOverlay]);
+
+  // Функция для расчета позиции попапа
+  const calculatePopupPosition = () => {
+    if (!ratingRef.current) return null;
+    
+    const rect = ratingRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // Определяем, хватит ли места справа для попапа
+    const popupWidth = 140;
+    const popupHeight = 80; // Примерная высота попапа
+    const spaceRight = viewportWidth - rect.right;
+    
+    let leftPosition;
+    let topPosition;
+    
+    // Определяем позицию по горизонтали
+    if (spaceRight >= popupWidth + 10) {
+      // Достаточно места справа
+      leftPosition = rect.right + 5;
+    } else {
+      // Не хватает места справа, показываем слева
+      leftPosition = rect.left - popupWidth - 5;
+    }
+    
+    // Определяем позицию по вертикали
+    // Центрируем попап относительно блока рейтинга
+    topPosition = rect.top + rect.height / 2 - popupHeight / 2;
+    
+    // Проверяем, чтобы попап не выходил за верхний или нижний край экрана
+    if (topPosition < 10) {
+      topPosition = 10;
+    } else if (topPosition + popupHeight > viewportHeight - 10) {
+      topPosition = viewportHeight - popupHeight - 10;
+    }
+    
+    return {
+      top: topPosition,
+      left: leftPosition
+    };
+  };
+
+  // Обработчик для наведения на блок рейтинга (только десктоп)
+  const handleRatingMouseEnter = (e: React.MouseEvent) => {
+    if (!isMobile && ratingRef.current) {
+      // Очищаем предыдущий таймер, если есть
+      if (ratingTimeoutRef.current) {
+        clearTimeout(ratingTimeoutRef.current);
+        ratingTimeoutRef.current = null;
+      }
+      
+      const position = calculatePopupPosition();
+      if (position) {
+        setRatingInfoPosition(position);
+        setIsRatingInfoOpen(true);
+      }
+    }
+  };
+
+  // Обработчик для ухода курсора с блока рейтинга (только десктоп)
+  const handleRatingMouseLeave = (e: React.MouseEvent) => {
+    if (!isMobile) {
+      // Небольшая задержка, чтобы проверить, не перешел ли курсор на попап
+      ratingTimeoutRef.current = setTimeout(() => {
+        if (isRatingInfoOpen) {
+          setIsRatingInfoOpen(false);
+        }
+      }, 100); // 100ms достаточно для перехода курсора на попап
+    }
+  };
+
+  // Обработчик для наведения на попап (только десктоп)
+  const handleRatingPopupMouseEnter = () => {
+    if (!isMobile) {
+      // Очищаем таймер закрытия, когда курсор на попапе
+      if (ratingTimeoutRef.current) {
+        clearTimeout(ratingTimeoutRef.current);
+        ratingTimeoutRef.current = null;
+      }
+    }
+  };
+
+  // Обработчик для ухода курсора с попапа (только десктоп)
+  const handleRatingPopupMouseLeave = () => {
+    if (!isMobile) {
+      // Закрываем попап сразу при уходе курсора
+      setIsRatingInfoOpen(false);
+    }
+  };
+
+  // Обработчик для клика на блок рейтинга (мобильный)
+  const handleRatingClick = (e: React.MouseEvent) => {
+    if (isMobile) {
+      e.stopPropagation();
+      
+      const position = calculatePopupPosition();
+      if (position) {
+        setRatingInfoPosition(position);
+        setIsRatingInfoOpen(true);
+      }
+    }
+  };
+
+  // Добавляем обработчик скролла для обновления позиции попапа
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isRatingInfoOpen && ratingInfoPosition) {
+        const newPosition = calculatePopupPosition();
+        if (newPosition) {
+          setRatingInfoPosition(newPosition);
+        }
+      }
+    };
+
+    if (isRatingInfoOpen) {
+      window.addEventListener('scroll', handleScroll, true);
+      window.addEventListener('resize', handleScroll);
+      
+      // Добавляем небольшую задержку, чтобы убедиться, что DOM обновился
+      const timeoutId = setTimeout(handleScroll, 50);
+      
+      return () => {
+        window.removeEventListener('scroll', handleScroll, true);
+        window.removeEventListener('resize', handleScroll);
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [isRatingInfoOpen, isMobile]);
 
   const handleSaveRating = (rating: number, date: string) => {
     const saveStatus = async () => {
@@ -223,7 +356,6 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
     }
   };
 
-  // Обработчики только для постера
   const handlePosterClick = () => {
     if (isMobile) {
       setShowOverlay(!showOverlay);
@@ -232,31 +364,41 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
   
   const handlePosterMouseEnter = () => { 
     if (!isMobile) {
+      setIsHovered(true);
       setShowOverlay(true);
     }
   };
   
   const handlePosterMouseLeave = (e: React.MouseEvent) => { 
     if (!isMobile) {
-      // Проверяем, уходит ли курсор на оверлей
       const relatedTarget = e.relatedTarget as HTMLElement;
       if (overlayRef.current && overlayRef.current.contains(relatedTarget)) {
-        return; // Курсор перешел на оверлей, не скрываем
+        return;
       }
+      setIsHovered(false);
       setShowOverlay(false);
     }
   };
 
   const handleOverlayMouseLeave = (e: React.MouseEvent) => {
     if (!isMobile) {
-      // Проверяем, уходит ли курсор на постер
       const relatedTarget = e.relatedTarget as HTMLElement;
       if (posterRef.current && posterRef.current.contains(relatedTarget)) {
-        return; // Курсор перешел на постер, не скрываем
+        return;
       }
+      setIsHovered(false);
       setShowOverlay(false);
     }
   };
+
+  // Очистка таймера при размонтировании
+  useEffect(() => {
+    return () => {
+      if (ratingTimeoutRef.current) {
+        clearTimeout(ratingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (isRemoved) {
     return (
@@ -276,9 +418,20 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
         releaseDate={movie.release_date || movie.first_air_date || null}
       />
 
+      <RatingInfoModal
+        isOpen={isRatingInfoOpen}
+        onClose={() => setIsRatingInfoOpen(false)}
+        onMouseEnter={handleRatingPopupMouseEnter}
+        onMouseLeave={handleRatingPopupMouseLeave}
+        tmdbRating={movie.vote_average || 0}
+        cineChanceRating={cineChanceRating}
+        position={ratingInfoPosition}
+        isMobile={isMobile}
+      />
+
       <div 
         ref={cardRef}
-        className="group w-full h-full min-w-0 relative"
+        className="w-full h-full min-w-0 relative"
       >
         <div className="relative">
           <div className={`${movie.media_type === 'movie' ? 'bg-green-500' : 'bg-blue-500'} text-white text-xs font-semibold px-2 py-1.5 rounded-t-lg w-full text-center`}>
@@ -290,7 +443,7 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
             className={`relative w-full aspect-[2/3] bg-gradient-to-br from-gray-800 to-gray-900 rounded-b-lg overflow-hidden shadow-lg transition-all duration-300 ${
               restoreView || isBlacklisted 
                 ? 'opacity-60 grayscale hover:opacity-80 hover:grayscale-0' 
-                : 'hover:shadow-xl'
+                : isHovered && !showOverlay ? 'shadow-xl' : ''
             } ${showOverlay ? 'cursor-default' : 'cursor-pointer'}`}
             onClick={handlePosterClick}
             onMouseEnter={handlePosterMouseEnter}
@@ -303,7 +456,9 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
               src={imageUrl}
               alt={title}
               fill
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              className={`object-cover transition-transform duration-500 ${
+                isHovered && !showOverlay ? 'scale-105' : ''
+              }`}
               sizes="(max-width: 640px) 48vw, (max-width: 768px) 31vw, (max-width: 1024px) 23vw, (max-width: 1280px) 19vw, 15vw"
               loading="lazy"
             />
@@ -381,13 +536,18 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
           )}
         </div>
         
-        {/* Зона под постером - без обработчиков событий */}
         <div className="mt-2 px-0.5">
           <h3 className={`text-xs sm:text-sm line-clamp-1 leading-tight ${isBlacklisted ? 'text-gray-500' : 'text-white font-medium'}`}>
             {title}
           </h3>
           <div className="flex items-center justify-between mt-1.5">
-            <div className="flex items-center bg-gray-800/50 px-1.5 py-0.5 rounded text-xs">
+            <div 
+              ref={ratingRef}
+              className="flex items-center bg-gray-800/50 px-1.5 py-0.5 rounded text-xs cursor-help relative"
+              onMouseEnter={handleRatingMouseEnter}
+              onMouseLeave={handleRatingMouseLeave}
+              onClick={handleRatingClick}
+            >
               <div className="mr-1 w-4 h-4 relative">
                   <Image 
                       src="/images/logo_mini_lgt_pls_tmdb.png" 
