@@ -12,7 +12,6 @@ type AuthModalProps = {
 };
 
 export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCode = '' }: AuthModalProps) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -22,20 +21,21 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
   const [isLoading, setIsLoading] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
 
+  // Режим регистрации только по приглашению
+  const isRegisterMode = !!inviteCode;
+
   // Установка начальных значений при открытии модального окна
   useEffect(() => {
     if (isOpen) {
       console.log('[AUTH_MODAL] Opened with:', { initialEmail, inviteCode });
+      
       if (initialEmail) {
         setEmail(initialEmail);
-        // Если есть inviteCode, переключаем в режим регистрации
-        if (inviteCode) {
-          console.log('[AUTH_MODAL] Switching to register mode with inviteCode');
-          setMode('register');
-        }
       }
+      
       // Сбрасываем ошибку при открытии
       setError('');
+      
       // Сбрасываем форму если открываем без inviteCode
       if (!inviteCode) {
         setPassword('');
@@ -46,67 +46,71 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
     }
   }, [isOpen, initialEmail, inviteCode]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    if (mode === 'login') {
-      const result = await signIn('credentials', {
+    const result = await signIn('credentials', {
+      redirect: false,
+      email,
+      password,
+    });
+
+    setIsLoading(false);
+
+    if (result?.error) {
+      setError('Неверный email или пароль');
+    } else {
+      onClose();
+      window.location.reload();
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    // Передаем inviteToken если пользователь регистрируется по приглашению
+    const signupData = {
+      email,
+      password,
+      name,
+      birthDate,
+      agreedToTerms,
+      ...(inviteCode && { inviteToken: inviteCode }),
+    };
+    
+    console.log('[AUTH_MODAL] Submitting signup with:', { 
+      email, 
+      hasInviteToken: !!inviteCode,
+      inviteToken: inviteCode ? inviteCode.substring(0, 20) + '...' : null 
+    });
+
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signupData),
+    });
+
+    const data = await res.json();
+    setIsLoading(false);
+
+    if (data.error) {
+      setError(data.error);
+    } else {
+      const loginResult = await signIn('credentials', {
         redirect: false,
         email,
         password,
       });
 
-      setIsLoading(false);
-
-      if (result?.error) {
-        setError('Неверный email или пароль');
+      if (loginResult?.error) {
+        setError('Регистрация прошла, но вход не удался');
       } else {
         onClose();
         window.location.reload();
-      }
-    } else {
-      // Передаем inviteToken если пользователь регистрируется по приглашению
-      const signupData = {
-        email,
-        password,
-        name,
-        birthDate,
-        agreedToTerms,
-        ...(inviteCode && { inviteToken: inviteCode }),
-      };
-      
-      console.log('[AUTH_MODAL] Submitting signup with:', { 
-        email, 
-        hasInviteToken: !!inviteCode,
-        inviteToken: inviteCode ? inviteCode.substring(0, 20) + '...' : null 
-      });
-
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(signupData),
-      });
-
-      const data = await res.json();
-      setIsLoading(false);
-
-      if (data.error) {
-        setError(data.error);
-      } else {
-        const loginResult = await signIn('credentials', {
-          redirect: false,
-          email,
-          password,
-        });
-
-        if (loginResult?.error) {
-          setError('Регистрация прошла, но вход не удался');
-        } else {
-          onClose();
-          window.location.reload();
-        }
       }
     }
   };
@@ -115,7 +119,7 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
         <div className="relative w-full max-w-md p-6 bg-gray-900 rounded-xl shadow-2xl border border-gray-800">
           <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -124,37 +128,23 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
           </button>
 
           <h3 className="text-2xl font-bold text-center mb-6">
-            {mode === 'login' ? 'Войти' : 'Регистрация'}
+            {isRegisterMode ? 'Регистрация' : 'Войти'}
           </h3>
 
-          <div className="flex justify-center mb-6 gap-8">
-            <button
-              onClick={() => setMode('login')}
-              className={`pb-2 border-b-2 transition ${mode === 'login' ? 'border-blue-500 text-white' : 'border-transparent text-gray-400'}`}
-            >
-              Вход
-            </button>
-            <button
-              onClick={() => setMode('register')}
-              className={`pb-2 border-b-2 transition ${mode === 'register' ? 'border-purple-500 text-white' : 'border-transparent text-gray-400'}`}
-            >
-              Регистрация
-            </button>
-          </div>
-
-          {error && <div className="mb-4 text-red-500 text-center">{error}</div>}
-
           {/* Информация о приглашении */}
-          {mode === 'register' && inviteCode && (
+          {isRegisterMode && (
             <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
               <p className="text-green-400 text-sm text-center">
-                ✨ Вы регистрируетесь по приглашению
+                Вы регистрируетесь по приглашению
               </p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            {mode === 'register' && (
+          {error && <div className="mb-4 text-red-500 text-center">{error}</div>}
+
+          <form onSubmit={isRegisterMode ? handleRegister : handleLogin}>
+            {/* Поля регистрации */}
+            {isRegisterMode && (
               <>
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2 text-purple-400">Никнейм</label>
@@ -184,6 +174,7 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
               </>
             )}
 
+            {/* Email */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
                 {inviteCode ? 'Email (из приглашения)' : 'Email'}
@@ -204,6 +195,7 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
               )}
             </div>
 
+            {/* Пароль */}
             <div className="mb-6">
               <label className="block text-sm font-medium mb-2">Пароль</label>
               <input
@@ -215,7 +207,8 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
               />
             </div>
 
-            {mode === 'register' && (
+            {/* Согласие с условиями */}
+            {isRegisterMode && (
               <div className="mb-4">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
@@ -239,17 +232,22 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
               </div>
             )}
 
+            {/* Кнопка отправки */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:brightness-110 disabled:opacity-70 flex items-center justify-center"
+              className={`w-full py-3 text-white rounded-lg font-medium hover:brightness-110 disabled:opacity-70 flex items-center justify-center ${
+                isRegisterMode 
+                  ? 'bg-gradient-to-r from-purple-600 to-blue-600' 
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600'
+              }`}
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Загрузка...</span>
                 </div>
-              ) : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+              ) : isRegisterMode ? 'Зарегистрироваться' : 'Войти'}
             </button>
           </form>
         </div>

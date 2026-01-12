@@ -1,12 +1,31 @@
 'use client';
 
 import { SessionProvider } from "next-auth/react";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import AuthModal from './AuthModal';
+
+// Компонент для обработки параметров URL (обёрнут в Suspense)
+function AuthParamsHandler({ onAuthRequired }: { onAuthRequired: () => void }) {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const auth = searchParams.get('auth');
+    if (auth === 'required' || auth === 'login') {
+      onAuthRequired();
+      // Очищаем URL параметр после открытия модального окна
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams, onAuthRequired]);
+
+  return null;
+}
 
 export default function LayoutClient({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const toggleSidebar = () => {
     setIsSidebarOpen(prev => !prev);
@@ -28,7 +47,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
   return (
     <SessionProvider
-      session={undefined} // В NextAuth 4 нужно передать undefined
+      session={undefined}
       refetchInterval={0}
       refetchOnWindowFocus={false}
     >
@@ -47,6 +66,17 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           </main>
         </div>
       </div>
+
+      {/* Обработчик параметров авторизации */}
+      <Suspense fallback={null}>
+        <AuthParamsHandler onAuthRequired={() => setIsAuthModalOpen(true)} />
+      </Suspense>
+
+      {/* Модальное окно авторизации */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+      />
     </SessionProvider>
   );
 }
