@@ -148,11 +148,19 @@ export default function RecommendationsClient({ userId }: RecommendationsClientP
   useEffect(() => {
     const initSession = async () => {
       try {
-        const res = await fetch('/api/recommendations/user-sessions/active', {
+        const res = await fetch('/api/recommendations/user-sessions', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId }),
         });
+        
+        // Проверяем, что ответ - JSON (а не редирект)
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('Non-JSON response from user-sessions API');
+          return;
+        }
+        
         const data: UserSessionResponse = await res.json();
         if (data.success) {
           setSessionId(data.sessionId);
