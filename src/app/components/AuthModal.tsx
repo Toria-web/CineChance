@@ -34,6 +34,13 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
       }
       // Сбрасываем ошибку при открытии
       setError('');
+      // Сбрасываем форму если открываем без inviteCode
+      if (!inviteCode) {
+        setPassword('');
+        setName('');
+        setBirthDate('');
+        setAgreedToTerms(false);
+      }
     }
   }, [isOpen, initialEmail, inviteCode]);
 
@@ -129,6 +136,15 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
 
           {error && <div className="mb-4 text-red-500 text-center">{error}</div>}
 
+          {/* Информация о приглашении */}
+          {mode === 'register' && inviteCode && (
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+              <p className="text-green-400 text-sm text-center">
+                ✨ Вы регистрируетесь по приглашению
+              </p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
             {mode === 'register' && (
               <>
@@ -161,14 +177,23 @@ export default function AuthModal({ isOpen, onClose, initialEmail = '', inviteCo
             )}
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Email</label>
+              <label className="block text-sm font-medium mb-2">
+                {inviteCode ? 'Email (из приглашения)' : 'Email'}
+              </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-3 bg-gray-800 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                readOnly={!!inviteCode}
+                disabled={!!inviteCode}
+                className={`w-full p-3 bg-gray-800 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 ${
+                  inviteCode ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
                 required
               />
+              {inviteCode && (
+                <p className="text-gray-500 text-xs mt-1">Email закреплён за приглашением и не может быть изменён</p>
+              )}
             </div>
 
             <div className="mb-6">
