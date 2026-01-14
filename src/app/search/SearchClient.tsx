@@ -29,10 +29,30 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [batchData, setBatchData] = useState<Record<string, any>>({});
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
 
   const ITEMS_PER_PAGE = 20;
   const INITIAL_ITEMS = 30;
+
+  const fetchBatchData = async (movies: Media[]) => {
+    if (movies.length === 0) return;
+
+    try {
+      const response = await fetch('/api/movies/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movies: movies.map(m => ({ tmdbId: m.id, mediaType: m.media_type })) }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBatchData(prev => ({ ...prev, ...data }));
+      }
+    } catch (error) {
+      console.error('Error fetching batch data:', error);
+    }
+  };
 
   // Handle filter changes
   const handleFiltersChange = async (filters: FilterState) => {
@@ -92,6 +112,9 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
       setPage(1);
       setHasMore(filteredResults.length < data.totalResults);
       setCurrentFilters(filters);
+
+      // Fetch batch data for the results
+      fetchBatchData(filteredResults);
     } catch (error) {
       console.error('Search error:', error);
       setResults([]);
@@ -129,6 +152,9 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
         setTotalResults(data.totalResults);
         setPage(1);
         setHasMore(filteredResults.length < data.totalResults);
+
+        // Fetch batch data for the results
+        fetchBatchData(filteredResults);
       } catch (error) {
         console.error('Search error:', error);
         setResults([]);
@@ -215,6 +241,9 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
       setResults(prev => [...prev, ...newResults]);
       setPage(nextPage);
       setHasMore(results.length + newResults.length < data.totalResults);
+
+      // Fetch batch data for new results
+      fetchBatchData(newResults);
     } catch (error) {
       console.error('Load more error:', error);
     } finally {
@@ -243,14 +272,27 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
       ) : results.length > 0 ? (
         <>
           <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
-            {results.map((item, index) => (
-              <div
-                key={`${item.media_type}_${item.id}`}
-                className="w-full min-w-0 p-1"
-              >
-                <MovieCard movie={item} priority={index < 6} />
-              </div>
-            ))}
+            {results.map((item, index) => {
+              const key = `${item.id}-${item.media_type}`;
+              const batch = batchData[key] || {};
+              return (
+                <div
+                  key={`${item.media_type}_${item.id}`}
+                  className="w-full min-w-0 p-1"
+                >
+                  <MovieCard 
+                    movie={item} 
+                    priority={index < 6}
+                    initialStatus={batch.status}
+                    initialIsBlacklisted={batch.isBlacklisted}
+                    initialUserRating={batch.userRating}
+                    initialWatchCount={batch.watchCount}
+                    initialAverageRating={batch.averageRating}
+                    initialRatingCount={batch.ratingCount}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Кнопка "Ещё" */}

@@ -34,6 +34,13 @@ interface AcceptedRecommendation {
 
 const ITEMS_PER_PAGE = 20;
 
+const STATUS_MAP: Record<string, 'want' | 'watched' | 'dropped' | 'rewatched' | null> = {
+  'Хочу посмотреть': 'want',
+  'Просмотрено': 'watched',
+  'Брошено': 'dropped',
+  'Пересмотрено': 'rewatched',
+};
+
 export default function MyMoviesClient({
   initialWatched,
   initialWantToWatch,
@@ -42,6 +49,24 @@ export default function MyMoviesClient({
   counts,
   userId,
 }: MyMoviesClientProps) {
+  const fetchBatchData = async (movies: Media[]) => {
+    if (movies.length === 0) return;
+
+    try {
+      const response = await fetch('/api/movies/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ movies: movies.map(m => ({ tmdbId: m.id, mediaType: m.media_type })) }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBatchData(prev => ({ ...prev, ...data }));
+      }
+    } catch (error) {
+      console.error('Error fetching batch data:', error);
+    }
+  };
   const [activeTab, setActiveTab] = useState<'watched' | 'wantToWatch' | 'dropped' | 'hidden'>('watched');
   const [filmFilters, setFilmFilters] = useState<FilmFilterState>({
     showMovies: true,
@@ -83,6 +108,7 @@ export default function MyMoviesClient({
   const [currentCounts, setCurrentCounts] = useState(counts);
   const [availableGenres, setAvailableGenres] = useState<{ id: number; name: string }[]>([]);
   const [userTags, setUserTags] = useState<Array<{ id: string; name: string; count: number }>>([]);
+  const [batchData, setBatchData] = useState<Record<string, any>>({});
   const isInitialMount = useRef(true);
   
   // Состояние для popup о просмотре фильма
@@ -513,7 +539,13 @@ export default function MyMoviesClient({
     }
   };
 
-  const currentMovies = getFilteredMovies(displayedMovies[activeTab]);
+  // Fetch batch data when movies change
+  useEffect(() => {
+    const movies = displayedMovies[activeTab];
+    if (movies.length > 0) {
+      fetchBatchData(movies as Media[]);
+    }
+  }, [displayedMovies, activeTab]);
   const isRestoreView = activeTab === 'hidden';
   const showLoadingSpinner = hasMore[activeTab] && loadingMore;
   const tabCounts = {
@@ -534,6 +566,8 @@ export default function MyMoviesClient({
       className: 'text-gray-500 hover:text-gray-400' 
     },
   ];
+
+  const currentMovies = getFilteredMovies(displayedMovies[activeTab]);
 
   return (
     <div className="min-h-screen bg-gray-950 py-3 sm:py-4">
@@ -625,16 +659,25 @@ export default function MyMoviesClient({
         ) : currentMovies.length > 0 ? (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-              {currentMovies.map((movie, index) => (
-                <div key={`${movie.id}-${index}`} className="p-1">
-                  <MovieCard 
-                    movie={movie as Media} 
-                    restoreView={isRestoreView}
-                    showRatingBadge 
-                    priority={index < 6} 
-                  />
-                </div>
-              ))}
+              {currentMovies.map((movie, index) => {
+                const key = `${movie.id}-${movie.media_type}`;
+                const batch = batchData[key] || {};
+                return (
+                  <div key={`${movie.id}-${index}`} className="p-1">
+                    <MovieCard 
+                      movie={movie as Media} 
+                      restoreView={isRestoreView}
+                      showRatingBadge 
+                      priority={index < 6}
+                      initialStatus={movie.statusName ? STATUS_MAP[movie.statusName] || null : null}
+                      initialIsBlacklisted={movie.isBlacklisted}
+                      initialUserRating={movie.userRating}
+                      initialAverageRating={batch.averageRating}
+                      initialRatingCount={batch.ratingCount}
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             <div ref={sentinelRef} className="h-4" />

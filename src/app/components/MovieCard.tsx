@@ -30,9 +30,13 @@ interface MovieCardProps {
   initialStatus?: MediaStatus;
   showRatingBadge?: boolean;
   priority?: boolean;
+  initialUserRating?: number | null;
+  initialWatchCount?: number;
+  initialAverageRating?: number | null;
+  initialRatingCount?: number;
 }
 
-export default function MovieCard({ movie, restoreView = false, initialIsBlacklisted, initialStatus, showRatingBadge = false, priority = false }: MovieCardProps) {
+export default function MovieCard({ movie, restoreView = false, initialIsBlacklisted, initialStatus, showRatingBadge = false, priority = false, initialUserRating, initialWatchCount, initialAverageRating, initialRatingCount }: MovieCardProps) {
   const [showOverlay, setShowOverlay] = useState(false);
   const [status, setStatus] = useState<MediaStatus>(initialStatus ?? null);
   const [isBlacklisted, setIsBlacklisted] = useState<boolean>(initialIsBlacklisted ?? false);
@@ -45,10 +49,10 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
   
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
   const [isRatingInfoOpen, setIsRatingInfoOpen] = useState(false);
-  const [cineChanceRating, setCineChanceRating] = useState<number | null>(null);
-  const [cineChanceVoteCount, setCineChanceVoteCount] = useState(0);
-  const [userRating, setUserRating] = useState<number | null>(null);
-  const [watchCount, setWatchCount] = useState(0);
+  const [cineChanceRating, setCineChanceRating] = useState<number | null>(initialAverageRating ?? null);
+  const [cineChanceVoteCount, setCineChanceVoteCount] = useState(initialRatingCount ?? 0);
+  const [userRating, setUserRating] = useState<number | null>(initialUserRating ?? null);
+  const [watchCount, setWatchCount] = useState(initialWatchCount ?? 0);
   const [pendingStatus, setPendingStatus] = useState<'watched' | 'dropped' | 'rewatched' | null>(null);
   const [pendingRewatch, setPendingRewatch] = useState<boolean>(false);
   const [isReratingOnly, setIsReratingOnly] = useState(false); // Режим переоценки без смены статуса
@@ -150,7 +154,10 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
       }
     };
 
-    fetchData();
+    // Если данные не переданы через props, делаем запросы
+    if (initialStatus === undefined || initialIsBlacklisted === undefined) {
+      fetchData();
+    }
     
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
@@ -193,6 +200,8 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
 
   // Получаем средний рейтинг Cine-chance
   useEffect(() => {
+    if (initialAverageRating !== undefined) return; // Если данные переданы через props, не делаем запрос
+
     const fetchAverageRating = async () => {
       try {
         const res = await fetch(`/api/cine-chance-rating?tmdbId=${movie.id}&mediaType=${movie.media_type}`);
@@ -207,7 +216,7 @@ export default function MovieCard({ movie, restoreView = false, initialIsBlackli
     };
     
     fetchAverageRating();
-  }, [movie.id, movie.media_type]);
+  }, [movie.id, movie.media_type, initialAverageRating]);
 
   // Функция обновления рейтингов (вызывается после пересмотра/переоценки)
   const refreshRatings = async () => {
