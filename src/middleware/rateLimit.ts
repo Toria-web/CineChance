@@ -3,35 +3,93 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { logger } from '@/lib/logger';
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+// Кеширование Redis-соединения
+let redisInstance: Redis | null = null;
+
+function getRedis(): Redis | null {
+  if (redisInstance) return redisInstance;
+  
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  
+  if (!url || !token) {
+    logger.warn('Redis environment variables not configured, rate limiting disabled');
+    return null;
+  }
+  
+  try {
+    redisInstance = new Redis({
+      url,
+      token,
+    });
+    return redisInstance;
+  } catch (error) {
+    logger.error('Failed to initialize Redis connection', { 
+      error: error instanceof Error ? error.message : String(error),
+      context: 'RateLimit'
+    });
+    return null;
+  }
+}
 
 // Конфигурация лимитов для разных эндпоинтов
 const endpointLimits: Record<string, { points: number; duration: number }> = {
-  '/api/search': { points: 10, duration: 60 }, // 10 запросов в минуту
+  '/api/search': { points: 60, duration: 60 }, // 60 запросов в минуту (1 запрос/сек)
   '/api/recommendations': { points: 30, duration: 60 }, // 30 запросов в минуту
   '/api/user': { points: 60, duration: 60 }, // 60 запросов в минуту
   'default': { points: 100, duration: 60 }, // 100 запросов в минуту
 };
 
-export async function rateLimit(req: Request, endpoint: string, userId?: string) {
-  const ip = req.headers.get('x-forwarded-for') || 'anonymous';
-  const key = userId ? `user:${userId}` : `ip:${ip}`;
-  const config = endpointLimits[endpoint] || endpointLimits['default'];
+// Кеширование Ratelimit instances
+const ratelimitCache: Map<string, Ratelimit> = new Map();
 
+function getRatelimit(endpoint: string): Ratelimit | null {
+  const cacheKey = `${endpoint}`;
+  if (ratelimitCache.has(cacheKey)) {
+    return ratelimitCache.get(cacheKey)!;
+  }
+  
+  const redis = getRedis();
+  if (!redis) return null;
+  
+  const config = endpointLimits[endpoint] || endpointLimits['default'];
+  
   const ratelimit = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(config.points, `${config.duration} s`),
     analytics: true,
   });
+  
+  ratelimitCache.set(cacheKey, ratelimit);
+  return ratelimit;
+}
 
-  const { success, limit, remaining, reset } = await ratelimit.limit(key);
-
-  if (!success) {
-    logger.warn(`Rate limit exceeded for ${key} on ${endpoint}. Limit: ${limit}, Remaining: ${remaining}, Reset: ${reset}`);
+export async function rateLimit(req: Request, endpoint: string, userId?: string) {
+  const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+  const key = userId ? `user:${userId}` : `ip:${ip}`;
+  const config = endpointLimits[endpoint] || endpointLimits['default'];
+  
+  const ratelimit = getRatelimit(endpoint);
+  
+  // Если Redis не доступен, пропускаем запрос
+  if (!ratelimit) {
+    return { success: true, limit: config.points, remaining: config.points, reset: Date.now() + config.duration * 1000 };
   }
 
-  return { success, limit, remaining, reset };
+  try {
+    const { success, limit, remaining, reset } = await ratelimit.limit(key);
+
+    if (!success) {
+      logger.warn(`Rate limit exceeded for ${key} on ${endpoint}. Limit: ${limit}, Remaining: ${remaining}, Reset: ${reset}`);
+    }
+
+    return { success, limit, remaining, reset };
+  } catch (error) {
+    // Если произошла ошибка при проверке лимита, пропускаем запрос
+    logger.error(`Rate limit check failed for ${key} on ${endpoint}`, { 
+      error: error instanceof Error ? error.message : String(error),
+      context: 'RateLimit'
+    });
+    return { success: true, limit: config.points, remaining: config.points, reset: Date.now() + config.duration * 1000 };
+  }
 }
