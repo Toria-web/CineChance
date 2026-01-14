@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
+import { MenuIcon, CloseIcon, SearchIcon } from './Icons';
 
 type HeaderProps = {
   toggleSidebar: () => void;
@@ -69,38 +70,11 @@ export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
             className="text-white hover:text-purple-500 transition shrink-0 flex items-center justify-center w-8 h-8 mr-4"
             aria-label={isSidebarOpen ? "Скрыть меню" : "Показать меню"}
           >
-            {/* Иконка гамбургера (три полоски) */}
+            {/* Иконка гамбургера (три полоски) или крестика */}
             {!isSidebarOpen ? (
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className="h-6 w-6" 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M4 6h16M4 12h16M4 18h16" 
-                />
-              </svg>
+              <MenuIcon className="h-6 w-6" />
             ) : (
-              /* Иконка крестика при открытом сайдбаре */
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className="h-6 w-6" 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M6 18L18 6M6 6l12 12" 
-                />
-              </svg>
+              <CloseIcon className="h-6 w-6" />
             )}
           </button>
           
@@ -139,20 +113,7 @@ export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
               className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5 rounded-full hover:bg-gray-800/50 transition-all duration-200 group"
               aria-label="Поиск"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 text-gray-400 group-hover:text-blue-400 transition-colors"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+              <SearchIcon className="h-5 w-5 text-gray-400 group-hover:text-blue-400 transition-colors" />
             </button>
           </div>
 
@@ -166,20 +127,7 @@ export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
                 className="p-2 rounded-full text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all duration-300"
                 aria-label="Развернуть поиск"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
+                <SearchIcon className="h-6 w-6" />
               </button>
             )}
 
@@ -207,20 +155,7 @@ export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-gray-800/50 transition-all duration-200"
                       aria-label="Выполнить поиск"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5 text-gray-400 hover:text-blue-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                        />
-                      </svg>
+                      <SearchIcon className="h-5 w-5 text-gray-400 hover:text-blue-400" />
                     </button>
                   </div>
 
@@ -230,20 +165,7 @@ export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
                     className="p-3 rounded-full hover:bg-gray-800/50 transition-all duration-200 shrink-0"
                     aria-label="Закрыть поиск"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-6 w-6 text-gray-400 hover:text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
+                    <CloseIcon className="h-6 w-6 text-gray-400 hover:text-white" />
                   </button>
                 </div>
               </div>

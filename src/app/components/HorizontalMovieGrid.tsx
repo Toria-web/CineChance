@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import MovieCard from './MovieCard';
 import Loader from './Loader';
 import { fetchTrendingMovies, Media } from '@/lib/tmdb';
+import { BlacklistProvider } from './BlacklistContext';
 
 export default function HorizontalMovieGrid() {
   const [movies, setMovies] = useState<Media[]>([]);
@@ -38,17 +39,19 @@ export default function HorizontalMovieGrid() {
   }
 
   return (
-    <div className="py-8">
-      <div className="container mx-auto px-4">
-        <h2 className="text-2xl font-bold text-white mb-6">В тренде сейчас</h2>
-        <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
-          {movies.map((movie, index) => (
-            <div key={movie.id} className="w-48 flex-shrink-0">
-              <MovieCard movie={movie} priority={index < 4} />
-            </div>
-          ))}
+    <BlacklistProvider>
+      <div className="py-8">
+        <div className="container mx-auto px-4">
+          <h2 className="text-2xl font-bold text-white mb-6">В тренде сейчас</h2>
+          <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
+            {movies.map((movie, index) => (
+              <div key={movie.id} className="w-48 flex-shrink-0">
+                <MovieCard movie={movie} priority={index < 4} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </BlacklistProvider>
   );
 }

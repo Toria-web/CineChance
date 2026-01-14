@@ -1,7 +1,7 @@
 // src/app/components/MovieCard.tsx
 'use client';
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, useContext } from 'react';
 import Image from 'next/image';
 import { Media } from '@/lib/tmdb';
 import RatingModal from './RatingModal';
@@ -10,6 +10,7 @@ import { calculateCineChanceScore } from '@/lib/calculateCineChanceScore';
 import MoviePoster from './MoviePoster';
 import StatusOverlay from './StatusOverlay';
 import { logger } from '@/lib/logger';
+import { useBlacklist } from './BlacklistContext';
 
 const RATING_TEXTS: Record<number, string> = {
   1: 'Хуже некуда',
@@ -88,6 +89,15 @@ export default function MovieCard({
     }[];
   } | null>(null);
 
+  const { checkBlacklist, isLoading: isBlacklistLoading } = useBlacklist();
+
+  // Initialize isBlacklisted from context when it loads
+  useEffect(() => {
+    if (!isBlacklistLoading && initialIsBlacklisted === undefined) {
+      setIsBlacklisted(checkBlacklist(movie.id));
+    }
+  }, [isBlacklistLoading, checkBlacklist, movie.id, initialIsBlacklisted]);
+
   const cardRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const posterRef = useRef<HTMLDivElement>(null);
@@ -151,19 +161,13 @@ export default function MovieCard({
           }
         }
 
-        if (initialIsBlacklisted === undefined) {
-          const blacklistRes = await fetch(`/api/blacklist?tmdbId=${movie.id}&mediaType=${movie.media_type}`);
-          if (blacklistRes.ok) {
-            const data = await blacklistRes.json();
-            setIsBlacklisted(data.isBlacklisted);
-          }
-        }
+        // Blacklist data is now fetched via context - no individual API call needed
       } catch (error) {
-        logger.error('Failed to fetch watchlist/blacklist data', { tmdbId: movie.id, mediaType: movie.media_type, error });
+        logger.error('Failed to fetch watchlist data', { tmdbId: movie.id, mediaType: movie.media_type, error });
       }
     };
 
-    if (initialStatus === undefined || initialIsBlacklisted === undefined) {
+    if (initialStatus === undefined) {
       fetchData();
     }
     
@@ -171,7 +175,7 @@ export default function MovieCard({
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, [movie.id, movie.media_type, restoreView, initialIsBlacklisted, initialStatus]);
+  }, [movie.id, movie.media_type, restoreView, initialIsBlacklisted, initialStatus, isBlacklistLoading, checkBlacklist]);
 
   // Обработчик клика вне оверлея
   useEffect(() => {

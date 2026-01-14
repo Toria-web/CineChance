@@ -2,6 +2,9 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { rateLimit } from '@/middleware/rateLimit';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(
   req: Request,
@@ -35,67 +38,63 @@ export async function GET(
 
     const data = await res.json();
 
-    // Получаем данные о статусе и blacklist для каждого фильма
-    const moviesWithStatus = await Promise.all(
-      (data.parts || []).map(async (movie: any) => {
-        let status = null;
-        let userRating = null;
-        let isBlacklisted = false;
+    // Получаем сессию пользователя
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id;
 
-        try {
-          // Получаем статус из watchlist
-          const statusRes = await fetch(
-            `/api/watchlist?tmdbId=${movie.id}&mediaType=movie`
-          );
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            status = statusData.status;
-            userRating = statusData.userRating;
-          }
+    // Получаем все blacklist IDs пользователя одним запросом
+    let blacklistedIds: Set<number> = new Set();
+    if (userId) {
+      const blacklist = await prisma.blacklist.findMany({
+        where: { userId },
+        select: { tmdbId: true }
+      });
+      blacklistedIds = new Set(blacklist.map(b => b.tmdbId));
+    }
 
-          // Получаем статус blacklist
-          const blacklistRes = await fetch(
-            `/api/blacklist?tmdbId=${movie.id}&mediaType=movie`
-          );
-          if (blacklistRes.ok) {
-            const blacklistData = await blacklistRes.json();
-            isBlacklisted = blacklistData.isBlacklisted;
-          }
-        } catch (error) {
-          logger.error('Error fetching status for movie', { 
-            movieId: movie.id,
-            error: error instanceof Error ? error.message : String(error),
-            context: 'Collection'
-          });
-        }
+    // Получаем все watchlist статусы пользователя одним запросом
+    let watchlistMap: Map<string, { status: string | null; userRating: number | null }> = new Map();
+    if (userId) {
+      const watchlist = await prisma.watchList.findMany({
+        where: { userId },
+        include: { status: true }
+      });
+      watchlist.forEach((item) => {
+        watchlistMap.set(`${item.mediaType}_${item.tmdbId}`, { 
+          status: item.status?.name || null, 
+          userRating: item.userRating 
+        });
+      });
+    }
 
-        // Формируем базовый объект
-        const movieData: any = {
-          id: movie.id,
-          media_type: 'movie',
-          title: movie.title,
-          name: movie.title,
-          poster_path: movie.poster_path,
-          vote_average: movie.vote_average,
-          vote_count: movie.vote_count,
-          release_date: movie.release_date,
-          first_air_date: movie.release_date,
-          overview: movie.overview,
-          isBlacklisted,
-        };
+    // Формируем данные о фильмах
+    const moviesWithStatus = (data.parts || []).map((movie: any) => {
+      const watchlistKey = `movie_${movie.id}`;
+      const watchlistData = watchlistMap.get(watchlistKey);
+      const isBlacklisted = blacklistedIds.has(movie.id);
 
-        // Добавляем status и userRating только если они существуют
-        // Это важно для MovieCard, который проверяет initialStatus === undefined
-        if (status) {
-          movieData.status = status;
-        }
-        if (userRating !== null && userRating !== undefined) {
-          movieData.userRating = userRating;
-        }
+      const movieData: any = {
+        id: movie.id,
+        media_type: 'movie',
+        title: movie.title,
+        name: movie.title,
+        poster_path: movie.poster_path,
+        vote_average: movie.vote_average,
+        vote_count: movie.vote_count,
+        release_date: movie.release_date,
+        first_air_date: movie.release_date,
+        overview: movie.overview,
+        isBlacklisted,
+      };
 
-        return movieData;
-      })
-    );
+      // Добавляем status и userRating только если они существуют
+      if (watchlistData) {
+        movieData.status = watchlistData.status;
+        movieData.userRating = watchlistData.userRating;
+      }
+
+      return movieData;
+    });
 
     return NextResponse.json({
       id: data.id,

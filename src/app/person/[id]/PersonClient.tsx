@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import MovieCard from '@/app/components/MovieCard';
 import Loader from '@/app/components/Loader';
 import { Media } from '@/lib/tmdb';
+import { BlacklistProvider } from '@/app/components/BlacklistContext';
 
 interface PersonCredit {
   id: number;
@@ -87,28 +88,40 @@ export default function PersonClient({ personId }: PersonClientProps) {
     if (!person) return;
 
     const fetchWatchlistStatuses = async () => {
-      const statuses = new Map<string, WatchlistStatus>();
-      
-      for (const item of person.filmography) {
-        try {
-          const res = await fetch(`/api/watchlist?tmdbId=${item.id}&mediaType=${item.media_type}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.status) {
+      const movies = person.filmography.map(item => ({
+        tmdbId: item.id,
+        mediaType: item.media_type
+      }));
+
+      try {
+        const res = await fetch('/api/movies/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ movies }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const statuses = new Map<string, WatchlistStatus>();
+          
+          person.filmography.forEach(item => {
+            const key = `${item.id}-${item.media_type}`;
+            const movieData = data[key];
+            if (movieData && movieData.status) {
               statuses.set(`${item.media_type}_${item.id}`, {
                 tmdbId: item.id,
                 mediaType: item.media_type,
-                status: data.status,
-                userRating: data.userRating,
+                status: movieData.status,
+                userRating: movieData.userRating,
               });
             }
-          }
-        } catch (err) {
-          console.error('Failed to fetch status for', item.id);
+          });
+          
+          setWatchlistStatuses(statuses);
         }
+      } catch (err) {
+        console.error('Failed to fetch watchlist statuses', err);
       }
-      
-      setWatchlistStatuses(statuses);
     };
 
     fetchWatchlistStatuses();
@@ -336,52 +349,54 @@ export default function PersonClient({ personId }: PersonClientProps) {
             </h2>
             
             {displayedItems.length > 0 ? (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-                  {displayedItems.map((movie, index) => {
-                    const statusKey = `${movie.media_type}_${movie.id}`;
-                    const watchlistStatus = watchlistStatuses.get(statusKey);
-                    
-                    return (
-                      <div key={statusKey} className="p-1">
-                        <MovieCard
-                          movie={movie as Media}
-                          restoreView={false}
-                          initialStatus={watchlistStatus?.status || undefined}
-                          showRatingBadge
-                          priority={index < 6}
-                        />
-                        {/* Роль актера */}
-                        {movie.character && (
-                          <p className="text-xs text-gray-500 mt-1 px-1 truncate">
-                            {movie.character}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Кнопка "Ещё" */}
-                {hasMore && (
-                  <div className="flex justify-center mt-6">
-                    <button
-                      onClick={loadMore}
-                      disabled={loadingMore}
-                      className="px-6 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {loadingMore ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"></div>
-                          Загрузка...
-                        </>
-                      ) : (
-                        'Ещё...'
-                      )}
-                    </button>
+              <BlacklistProvider>
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                    {displayedItems.map((movie, index) => {
+                      const statusKey = `${movie.media_type}_${movie.id}`;
+                      const watchlistStatus = watchlistStatuses.get(statusKey);
+                      
+                      return (
+                        <div key={statusKey} className="p-1">
+                          <MovieCard
+                            movie={movie as Media}
+                            restoreView={false}
+                            initialStatus={watchlistStatus?.status || undefined}
+                            showRatingBadge
+                            priority={index < 6}
+                          />
+                          {/* Роль актера */}
+                          {movie.character && (
+                            <p className="text-xs text-gray-500 mt-1 px-1 truncate">
+                              {movie.character}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </>
+
+                  {/* Кнопка "Ещё" */}
+                  {hasMore && (
+                    <div className="flex justify-center mt-6">
+                      <button
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                        className="px-6 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {loadingMore ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"></div>
+                            Загрузка...
+                          </>
+                        ) : (
+                          'Ещё...'
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </>
+              </BlacklistProvider>
             ) : (
               <div className="text-center py-20">
                 <p className="text-gray-400 text-lg">

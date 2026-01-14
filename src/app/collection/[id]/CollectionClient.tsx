@@ -109,6 +109,7 @@ export default function CollectionClient({ collectionId }: { collectionId: strin
                   <MovieCard
                     movie={movie}
                     restoreView={movie.isBlacklisted}
+                    initialIsBlacklisted={movie.isBlacklisted}
                     initialStatus={movie.status}
                     showRatingBadge
                     priority={index < 6}

@@ -9,9 +9,10 @@ import { logger } from '@/lib/logger';
 
 export default async function MovieGridServer() {
   try {
-    // Получаем сессию пользователя для проверки возраста
+    // Получаем сессию пользователя для проверки возраста и blacklist
     const session = await getServerSession(authOptions);
     let shouldFilterAdult = false;
+    let blacklistedIds: Set<number> = new Set();
 
     // Проверяем возраст пользователя, если он авторизован
     if (session?.user?.id) {
@@ -23,6 +24,13 @@ export default async function MovieGridServer() {
       if (user?.birthDate) {
         shouldFilterAdult = isUnder18(user.birthDate);
       }
+
+      // Получаем blacklist пользователя
+      const blacklist = await prisma.blacklist.findMany({
+        where: { userId: session.user.id as string },
+        select: { tmdbId: true }
+      });
+      blacklistedIds = new Set(blacklist.map(b => b.tmdbId));
     }
 
     const movies = await fetchTrendingMovies('week');
@@ -51,7 +59,12 @@ export default async function MovieGridServer() {
         
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 sm:gap-6">
           {displayMovies.map((movie, index) => (
-            <MovieCard key={movie.id} movie={movie} priority={index < 6} />
+            <MovieCard 
+              key={movie.id} 
+              movie={movie} 
+              priority={index < 6}
+              initialIsBlacklisted={blacklistedIds.has(movie.id)}
+            />
           ))}
         </div>
       </div>
@@ -62,7 +75,7 @@ export default async function MovieGridServer() {
       <div className="w-full">
         <h1 className="text-3xl sm:text-4xl font-bold mb-8 mt-4">Популярное на этой неделе</h1>
         <div className="text-center py-12">
-          <p className="text-red-400 text-lg">Ошибка при загрузке фильмов</p>
+          <p className="red-400 text-lg">Ошибка при загрузке фильмов</p>
         </div>
       </div>
     );

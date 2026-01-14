@@ -95,12 +95,21 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
       const res = await fetch(`/api/search?${params.toString()}`);
       const data: SearchResults = await res.json();
 
-      // Filter out blacklisted items and deduplicate
+      // Check if response has valid results
+      if (!data.results) {
+        setResults([]);
+        setTotalResults(0);
+        setLoading(false);
+        return;
+      }
+
+      // Filter out blacklisted items and movies with TMDB rating = 0, then deduplicate
       const blacklistedSet = new Set(blacklistedIds);
       const seen = new Set<string>();
       const filteredResults = data.results.filter((item: Media) => {
         const key = `${item.media_type}_${item.id}`;
-        if (seen.has(key) || blacklistedSet.has(item.id)) {
+        // Filter out blacklisted items, movies with no rating, and duplicates
+        if (seen.has(key) || blacklistedSet.has(item.id) || (item.vote_average ?? 0) <= 0) {
           return false;
         }
         seen.add(key);
@@ -108,9 +117,9 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
       });
 
       setResults(filteredResults);
-      setTotalResults(data.totalResults);
+      setTotalResults(data.totalResults || 0);
       setPage(1);
-      setHasMore(filteredResults.length < data.totalResults);
+      setHasMore(filteredResults.length < (data.totalResults || 0));
       setCurrentFilters(filters);
 
       // Fetch batch data for the results
@@ -136,12 +145,21 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
         const res = await fetch(`/api/search?q=${encodeURIComponent(initialQuery)}&page=1&limit=${INITIAL_ITEMS}`);
         const data: SearchResults = await res.json();
 
-        // Filter out blacklisted items and deduplicate
+        // Check if response has valid results
+        if (!data.results) {
+          setResults([]);
+          setTotalResults(0);
+          setLoading(false);
+          return;
+        }
+
+        // Filter out blacklisted items and movies with TMDB rating = 0, then deduplicate
         const blacklistedSet = new Set(blacklistedIds);
         const seen = new Set<string>();
         const filteredResults = data.results.filter((item: Media) => {
           const key = `${item.media_type}_${item.id}`;
-          if (seen.has(key) || blacklistedSet.has(item.id)) {
+          // Filter out blacklisted items, movies with no rating, and duplicates
+          if (seen.has(key) || blacklistedSet.has(item.id) || (item.vote_average ?? 0) <= 0) {
             return false;
           }
           seen.add(key);
@@ -149,9 +167,9 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
         });
 
         setResults(filteredResults);
-        setTotalResults(data.totalResults);
+        setTotalResults(data.totalResults || 0);
         setPage(1);
-        setHasMore(filteredResults.length < data.totalResults);
+        setHasMore(filteredResults.length < (data.totalResults || 0));
 
         // Fetch batch data for the results
         fetchBatchData(filteredResults);
@@ -225,13 +243,21 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
       const res = await fetch(`/api/search?${params.toString()}`);
       const data: SearchResults = await res.json();
       
-      // Filter out blacklisted items and deduplicate
+      // Check if response has valid results
+      if (!data.results) {
+        setLoadingMore(false);
+        setHasMore(false);
+        return;
+      }
+      
+      // Filter out blacklisted items and movies with TMDB rating = 0, then deduplicate
       const blacklistedSet = new Set(blacklistedIds);
       const seen = new Set<string>();
       const existingKeys = new Set(results.map(r => `${r.media_type}_${r.id}`));
       const newResults = data.results.filter((item: Media) => {
         const key = `${item.media_type}_${item.id}`;
-        if (seen.has(key) || blacklistedSet.has(item.id) || existingKeys.has(key)) {
+        // Filter out blacklisted items, movies with no rating, and duplicates
+        if (seen.has(key) || blacklistedSet.has(item.id) || existingKeys.has(key) || (item.vote_average ?? 0) <= 0) {
           return false;
         }
         seen.add(key);
@@ -240,7 +266,7 @@ export default function SearchClient({ initialQuery, blacklistedIds }: SearchCli
       
       setResults(prev => [...prev, ...newResults]);
       setPage(nextPage);
-      setHasMore(results.length + newResults.length < data.totalResults);
+      setHasMore(results.length + newResults.length < (data.totalResults || 0));
 
       // Fetch batch data for new results
       fetchBatchData(newResults);
