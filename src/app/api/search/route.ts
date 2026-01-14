@@ -54,19 +54,27 @@ export async function GET(request: Request) {
       // Получаем несколько страниц, чтобы обеспечить нужное количество для пагинации
       const pagesToFetch = Math.ceil((page * limit) / 20) + 1; // +1 для запаса
       
+      // Создаём массив промисов для параллельной загрузки страниц
+      const fetchPromises = [];
       for (let apiPage = 1; apiPage <= pagesToFetch; apiPage++) {
-        // Динамически устанавливаем include_adult в зависимости от возраста пользователя
         const url = new URL(`https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&language=ru-RU&page=${apiPage}&include_adult=${!shouldFilterAdult}`);
         url.searchParams.set('query', query);
 
-        const res = await fetch(url.toString());
-        const data = await res.json();
-        
-        if (data.results && data.results.length > 0) {
-          allResults = allResults.concat(data.results);
-        } else {
-          break; // Больше нет результатов
+        const promise = fetch(url.toString(), { next: { revalidate: 3600 } })
+          .then(res => res.json())
+          .catch(error => ({ error, page: apiPage })); // В случае ошибки возвращаем объект с ошибкой
+        fetchPromises.push(promise);
+      }
+
+      // Выполняем все запросы параллельно
+      const results = await Promise.allSettled(fetchPromises);
+
+      // Собираем результаты, игнорируя ошибки
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.results && result.value.results.length > 0) {
+          allResults = allResults.concat(result.value.results);
         }
+        // Если rejected или нет результатов, пропускаем
       }
 
       // Дополнительная серверная фильтрация на случай, если TMDB не применил настройки
