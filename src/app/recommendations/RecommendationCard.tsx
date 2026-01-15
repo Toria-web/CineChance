@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
+import { STATIC_BLUR_PLACEHOLDER } from '@/lib/blurPlaceholder';
 const RecommendationInfoModal = dynamic(() => import('./RecommendationInfoModal'), { ssr: false });
 
 interface MovieData {
@@ -181,6 +182,10 @@ export default function RecommendationCard({
               fill
               className="object-cover"
               priority
+              placeholder="blur"
+              blurDataURL={STATIC_BLUR_PLACEHOLDER}
+              sizes="(max-width: 640px) 80vw, (max-width: 1024px) 50vw, 33vw"
+              quality={85}
             />
           ) : (
             <div className="w-full h-full bg-gray-800 flex items-center justify-center">

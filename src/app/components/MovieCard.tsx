@@ -12,6 +12,7 @@ import MoviePoster from './MoviePoster';
 import StatusOverlay from './StatusOverlay';
 import { logger } from '@/lib/logger';
 import { useBlacklist } from './BlacklistContext';
+import { STATIC_BLUR_PLACEHOLDER } from '@/lib/blurPlaceholder';
 
 const RATING_TEXTS: Record<number, string> = {
   1: 'Хуже некуда',
@@ -508,9 +509,12 @@ export default function MovieCard({
               className={`object-cover transition-transform duration-500 ${
                 isHovered && !showOverlay ? 'scale-105' : ''
               }`}
-              sizes="(max-width: 640px) 48vw, (max-width: 768px) 31vw, (max-width: 1024px) 23vw, (max-width: 1280px) 19vw, 15vw"
+              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
               loading={priority ? "eager" : "lazy"}
+              placeholder="blur"
+              blurDataURL={STATIC_BLUR_PLACEHOLDER}
               onError={handlePosterError}
+              quality={85}
             />
           </div>
 

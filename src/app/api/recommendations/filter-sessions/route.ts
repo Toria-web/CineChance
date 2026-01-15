@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       userId,
       sessionId,
       initialState,
+      initialFilters, // Альтернативное имя поля от клиента
       changesHistory,
       resultMetrics,
       abandonedFilters,
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       userId: string;
       sessionId: string;
       initialState?: Record<string, unknown>;
+      initialFilters?: Record<string, unknown>;
       changesHistory?: FilterChange[];
       resultMetrics?: FilterSessionResultMetrics;
       abandonedFilters?: AbandonedFilter[];
@@ -59,6 +61,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Поддерживаем оба варианта: initialState или initialFilters
+    const stateData = initialState || initialFilters || {};
+
     // Валидация исхода сессии
     const validOutcomes = ['success', 'partial', 'abandoned', 'error'];
     if (outcome && !validOutcomes.includes(outcome)) {
@@ -68,25 +73,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Проверяем, существует ли UserSession
-    const userSessionExists = await prisma.userSession.findUnique({
-      where: { id: sessionId },
+    // Проверяем, существует ли UserSession (используем sessionId из запроса)
+    const userSession = await prisma.userSession.findUnique({
+      where: { sessionId },
       select: { id: true }
     });
 
-    if (!userSessionExists) {
-      return NextResponse.json(
-        { error: 'UserSession not found' },
-        { status: 404 }
-      );
-    }
-
-    // Создание записи сессии фильтров
+    // Создаем запись сессии фильтров
+    // sessionId передаём только если UserSession существует
     const filterSession = await prisma.filterSession.create({
       data: {
         userId,
-        sessionId,
-        initialState: initialState as any,
+        sessionId: userSession ? sessionId : undefined,
+        initialState: stateData as any,
         changesHistory: changesHistory as any,
         resultMetrics: resultMetrics as any,
         abandonedFilters: abandonedFilters as any,
@@ -96,13 +95,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Обновляем связь в UserSession
-    await prisma.userSession.update({
-      where: { id: sessionId },
-      data: {
-        filterSessions: { connect: { id: filterSession.id } }
-      }
-    });
+    // Если UserSession существует, обновляем связь
+    if (userSession) {
+      await prisma.userSession.update({
+        where: { sessionId },
+        data: {
+          filterSessions: { connect: { id: filterSession.id } }
+        }
+      });
+    }
 
     return NextResponse.json(
       {

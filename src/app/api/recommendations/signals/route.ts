@@ -4,12 +4,24 @@ import { ElementContext, SignalTemporalContext, PredictedIntent } from '@/lib/re
 import { logger } from '@/lib/logger';
 import { rateLimit } from '@/middleware/rateLimit';
 
+// Валидные типы сигналов
+const VALID_SIGNAL_TYPES = [
+  'hover_start',
+  'hover_end',
+  'hover_duration_threshold',
+  'scroll_pause',
+  'element_visible',
+  'interaction_pattern',
+  'temporal_pattern'
+];
+
 /**
  * API endpoint для записи неявных сигналов намерений пользователя
  * POST /api/recommendations/signals
  * 
- * Сигналы намерений - это неявные сигналы поведения пользователя,
- * которые позволяют ML-моделям предсказывать интерес к контенту.
+ * Поддерживает как одиночные запросы, так и батчи:
+ * - Одиночный: { userId, recommendationLogId, signalType, ... }
+ * - Батч: { batch: [...] }
  */
 export async function POST(request: NextRequest) {
   const { success } = await rateLimit(request, '/api/recommendations');
@@ -23,7 +35,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Валидация входных данных
     if (!body || typeof body !== 'object') {
       return NextResponse.json(
         { error: 'Invalid request body' },
@@ -31,77 +42,85 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const {
-      userId,
-      recommendationLogId,
-      signalType,
-      elementContext,
-      temporalContext,
-      predictedIntent
-    } = body as {
-      userId: string;
-      recommendationLogId: string;
-      signalType: string;
-      elementContext?: ElementContext;
-      temporalContext?: SignalTemporalContext;
-      predictedIntent?: PredictedIntent;
-    };
-
-    // Обязательные поля
-    if (!userId || !recommendationLogId || !signalType) {
-      return NextResponse.json(
-        { error: 'Missing required fields: userId, recommendationLogId, signalType' },
-        { status: 400 }
-      );
+    // Проверка на batch-запрос
+    if (Array.isArray(body)) {
+      return handleBatch(body);
     }
 
-    // Валидация типа сигнала
-    const validSignalTypes = [
-      'hover_start',
-      'hover_end',
-      'hover_duration_threshold',
-      'scroll_pause',
-      'element_visible',
-      'interaction_pattern',
-      'temporal_pattern'
-    ];
-
-    if (!validSignalTypes.includes(signalType)) {
-      return NextResponse.json(
-        { error: `Invalid signal type. Must be one of: ${validSignalTypes.join(', ')}}` },
-        { status: 400 }
-      );
+    if (body.batch && Array.isArray(body.batch)) {
+      return handleBatch(body.batch);
     }
 
-    // Создание записи сигнала
+    // Одиночный запрос
+    return handleSingle(body);
+
+  } catch (error) {
+    logger.error('Error in signals POST', { 
+      error: error instanceof Error ? error.message : String(error),
+      context: 'Recommendations'
+    });
+    return NextResponse.json(
+      { error: 'Failed to process signal request' },
+      { status: 500 }
+    );
+  }
+}
+
+// Обработка одиночного сигнала
+async function handleSingle(body: Record<string, unknown>) {
+  const {
+    userId,
+    recommendationLogId,
+    signalType,
+    elementContext,
+    temporalContext,
+    predictedIntent
+  } = body as {
+    userId: string;
+    recommendationLogId?: string;
+    signalType: string;
+    elementContext?: ElementContext;
+    temporalContext?: SignalTemporalContext;
+    predictedIntent?: PredictedIntent;
+  };
+
+  if (!userId || !signalType) {
+    return NextResponse.json(
+      { error: 'Missing required fields: userId, signalType' },
+      { status: 400 }
+    );
+  }
+
+  if (!VALID_SIGNAL_TYPES.includes(signalType)) {
+    return NextResponse.json(
+      { error: `Invalid signal type. Must be one of: ${VALID_SIGNAL_TYPES.join(', ')}` },
+      { status: 400 }
+    );
+  }
+
+  try {
     const signal = await prisma.intentSignal.create({
       data: {
         userId,
-        recommendationLogId,
+        recommendationLogId: recommendationLogId || undefined,
         signalType,
-        intensityScore: 0.5, // TODO: calculate intensity
+        intensityScore: 0.5,
         elementContext: elementContext as any,
         temporalContext: temporalContext as any,
         predictedIntent: predictedIntent as any,
       },
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        signalId: signal.id,
-        message: 'Intent signal recorded successfully'
-      },
-      { status: 201 }
-    );
-
+    return NextResponse.json({
+      success: true,
+      signalId: signal.id,
+    }, { status: 201 });
   } catch (error) {
     logger.error('Error recording intent signal', { 
       error: error instanceof Error ? error.message : String(error),
       context: 'Recommendations'
     });
 
-    // Обработка ошибок Prisma
     if (error instanceof Error && error.name === 'PrismaClientValidationError') {
       return NextResponse.json(
         { error: 'Invalid data format for signal recording' },
@@ -116,134 +135,68 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * GET /api/recommendations/signals
- * Получение сигналов для аналитики и ML-пайплайнов
- */
-export async function GET(request: NextRequest) {
-  const { success } = await rateLimit(request, '/api/recommendations');
-  if (!success) {
-    return NextResponse.json(
-      { error: 'Too Many Requests' },
-      { status: 429 }
-    );
-  }
-  
+// Обработка батча сигналов
+async function handleBatch(batch: Record<string, unknown>[]) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const recommendationLogId = searchParams.get('recommendationLogId');
-    const signalType = searchParams.get('signalType');
-    const limit = parseInt(searchParams.get('limit') || '100', 10);
-    const offset = parseInt(searchParams.get('offset') || '0', 10);
+    const signals = await prisma.$transaction(
+      batch.map((item) => {
+        const {
+          userId,
+          recommendationLogId,
+          signalType,
+          elementContext,
+          temporalContext,
+          predictedIntent
+        } = item as {
+          userId: string;
+          recommendationLogId?: string;
+          signalType: string;
+          elementContext?: Record<string, unknown>;
+          temporalContext?: Record<string, unknown>;
+          predictedIntent?: Record<string, unknown>;
+        };
 
-    // Построение фильтра
-    const where: Record<string, unknown> = {};
+        if (!userId || !signalType || !VALID_SIGNAL_TYPES.includes(signalType)) {
+          return prisma.intentSignal.create({
+            data: {
+              userId: userId || 'unknown',
+              recommendationLogId: undefined,
+              signalType: 'error',
+              intensityScore: 0,
+              elementContext: { error: 'Invalid signal data', original: item } as any,
+            },
+          });
+        }
 
-    if (userId) where.userId = userId;
-    if (recommendationLogId) where.recommendationLogId = recommendationLogId;
-    if (signalType) where.signalType = signalType;
-
-    // Получение сигналов
-    const signals = await prisma.intentSignal.findMany({
-      where,
-      take: Math.min(limit, 500), // Ограничение максимум 500 записей
-      skip: offset,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        userId: true,
-        recommendationLogId: true,
-        signalType: true,
-        intensityScore: true,
-        elementContext: true,
-        temporalContext: true,
-        predictedIntent: true,
-        createdAt: true,
-      },
-    });
-
-    // Получение общего количества
-    const total = await prisma.intentSignal.count({ where });
+        return prisma.intentSignal.create({
+          data: {
+            userId,
+            recommendationLogId: recommendationLogId || undefined,
+            signalType,
+            intensityScore: 0.5,
+            elementContext: elementContext as any,
+            temporalContext: temporalContext as any,
+            predictedIntent: predictedIntent as any,
+          },
+        });
+      })
+    );
 
     return NextResponse.json({
       success: true,
-      data: signals,
-      pagination: {
-        total,
-        limit,
-        offset,
-        hasMore: offset + signals.length < total,
-      }
-    });
+      batchSize: signals.length,
+      message: `Batch of ${signals.length} signals recorded`,
+    }, { status: 201 });
 
   } catch (error) {
-    logger.error('Error fetching intent signals', { 
+    logger.error('Error recording batch of signals', { 
       error: error instanceof Error ? error.message : String(error),
+      batchSize: batch.length,
       context: 'Recommendations'
     });
+
     return NextResponse.json(
-      { error: 'Failed to fetch signals' },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * PATCH /api/recommendations/signals
- * Обновление статуса обработки сигналов (для ML-пайплайнов)
- */
-export async function PATCH(request: NextRequest) {
-  const { success } = await rateLimit(request, '/api/recommendations');
-  if (!success) {
-    return NextResponse.json(
-      { error: 'Too Many Requests' },
-      { status: 429 }
-    );
-  }
-  
-  try {
-    const body = await request.json();
-
-    const { signalIds, modelVersion, intentPrediction } = body as {
-      signalIds: string[];
-      modelVersion?: string;
-      intentPrediction?: Record<string, unknown>;
-    };
-
-    if (!signalIds || !Array.isArray(signalIds) || signalIds.length === 0) {
-      return NextResponse.json(
-        { error: 'Missing or empty signalIds array' },
-        { status: 400 }
-      );
-    }
-
-    // Обновление данных
-    const updateData: Record<string, unknown> = {};
-
-    if (intentPrediction) {
-      updateData.predictedIntent = intentPrediction;
-    }
-
-    await prisma.intentSignal.updateMany({
-      where: {
-        id: { in: signalIds },
-      },
-      data: updateData,
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `${signalIds.length} signals updated`
-    });
-
-  } catch (error) {
-    logger.error('Error updating intent signals', { 
-      error: error instanceof Error ? error.message : String(error),
-      context: 'Recommendations'
-    });
-    return NextResponse.json(
-      { error: 'Failed to update signals' },
+      { error: 'Failed to record batch' },
       { status: 500 }
     );
   }

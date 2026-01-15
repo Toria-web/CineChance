@@ -1,7 +1,7 @@
 // src/app/recommendations/useSessionTracking.ts
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 interface SessionFlow {
   recommendationsShown: number;
@@ -22,30 +22,69 @@ interface FilterChange {
   [key: string]: unknown;
 }
 
-interface UserSessionResponse {
-  success: boolean;
+interface EventPayload {
+  userId: string;
   sessionId: string;
-  isNew: boolean;
+  recommendationLogId?: string;
+  eventType: string;
+  eventData?: Record<string, unknown>;
+  timestamp: string;
 }
 
-interface EventResponse {
-  success: boolean;
-  eventId: string;
+interface SignalPayload {
+  userId: string;
+  sessionId: string;
+  recommendationLogId?: string;
+  signalType: string;
+  elementContext?: { elementType: string; elementPosition: { x: number; y: number; viewportPercentage: number }; elementVisibility: number };
+  temporalContext?: Record<string, unknown>;
+  rawSignals?: Record<string, unknown>;
 }
 
-interface SignalResponse {
-  success: boolean;
-  signalId: string;
-}
+// Батч-отправитель для оптимизации запросов
+class BatchSender {
+  private queue: Array<{ payload: unknown; endpoint: string; method: string }> = [];
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly batchWindowMs = 100; // Окно батчинга в мс
+  private readonly maxBatchSize = 10;
 
-interface FilterSessionResponse {
-  success: boolean;
-  filterSessionId: string;
+  constructor(
+    private onSend: (payloads: Array<{ payload: unknown; endpoint: string; method: string }>) => Promise<void>
+  ) {}
+
+  add(payload: unknown, endpoint: string, method: string = 'POST') {
+    this.queue.push({ payload, endpoint, method });
+    
+    if (this.queue.length >= this.maxBatchSize) {
+      this.flush();
+    } else if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flush(), this.batchWindowMs);
+    }
+  }
+
+  async flush() {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    if (this.queue.length === 0) return;
+
+    const toSend = [...this.queue];
+    this.queue = [];
+
+    try {
+      await this.onSend(toSend);
+    } catch (err) {
+      console.error('Error sending batch:', err);
+    }
+  }
 }
 
 export function useSessionTracking(userId: string, logId: string | null) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [filterSessionId, setFilterSessionId] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Метрики сессии
   const sessionMetrics = useRef<SessionFlow>({
@@ -59,9 +98,59 @@ export function useSessionTracking(userId: string, logId: string | null) {
 
   const filterChanges = useRef<FilterChange[]>([]);
   const sessionStartTime = useRef<number>(0);
+  const pendingEvents = useRef<EventPayload[]>([]);
+  const pendingSignals = useRef<SignalPayload[]>([]);
 
-  // Получение или создание сессии пользователя
+  // Батч-отправитель для событий
+  const eventSender = useMemo(() => new BatchSender(async (items) => {
+    if (items.length === 0) return;
+
+    // Группируем по endpoint
+    const eventsByEndpoint: Record<string, EventPayload[]> = {};
+    items.forEach(item => {
+      const key = item.endpoint;
+      if (!eventsByEndpoint[key]) eventsByEndpoint[key] = [];
+      eventsByEndpoint[key].push(item.payload as EventPayload);
+    });
+
+    // Отправляем батчи
+    await Promise.all(
+      Object.entries(eventsByEndpoint).map(([endpoint, payloads]) =>
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch: payloads }),
+        }).catch(() => {})
+      )
+    );
+  }), []);
+
+  // Батч-отправитель для сигналов
+  const signalSender = useMemo(() => new BatchSender(async (items) => {
+    if (items.length === 0) return;
+
+    const signalsByEndpoint: Record<string, SignalPayload[]> = {};
+    items.forEach(item => {
+      const key = item.endpoint;
+      if (!signalsByEndpoint[key]) signalsByEndpoint[key] = [];
+      signalsByEndpoint[key].push(item.payload as SignalPayload);
+    });
+
+    await Promise.all(
+      Object.entries(signalsByEndpoint).map(([endpoint, payloads]) =>
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch: payloads }),
+        }).catch(() => {})
+      )
+    );
+  }), []);
+
+  // Инициализация сессии (debounced)
   useEffect(() => {
+    if (!userId || isInitialized) return;
+
     const initSession = async () => {
       try {
         const res = await fetch('/api/recommendations/user-sessions', {
@@ -70,82 +159,76 @@ export function useSessionTracking(userId: string, logId: string | null) {
           body: JSON.stringify({ userId }),
         });
 
-        // Проверяем, что ответ - JSON (а не редирект)
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-          console.error('Non-JSON response from user-sessions API');
           return;
         }
 
-        const data: UserSessionResponse = await res.json();
+        const data = await res.json();
         if (data.success) {
           setSessionId(data.sessionId);
           sessionStartTime.current = Date.now();
+          setIsInitialized(true);
         }
       } catch (err) {
         console.error('Error initializing session:', err);
       }
     };
 
-    if (userId) {
-      initSession();
-    }
+    initSession();
+  }, [userId, isInitialized]);
 
-    // Завершение сессии при уходе со страницы
+  // Завершение сессии при уходе со страницы
+  useEffect(() => {
     return () => {
       if (sessionId) {
-        endSession();
+        // Отправляем всё перед уходом
+        eventSender.flush();
+        signalSender.flush();
+        
+        const endSessionAsync = async () => {
+          try {
+            const durationMs = Date.now() - sessionStartTime.current;
+            await fetch('/api/recommendations/user-sessions', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId,
+                sessionFlow: sessionMetrics.current,
+                durationMs,
+                endedAt: new Date().toISOString(),
+              }),
+            });
+          } catch (err) {
+            console.error('Error ending session:', err);
+          }
+        };
+        endSessionAsync();
       }
     };
-  }, [userId, sessionId]);
+  }, [sessionId, eventSender, signalSender]);
 
-  // Завершение сессии
-  const endSession = useCallback(async () => {
-    if (!sessionId) return;
-
-    try {
-      const durationMs = Date.now() - sessionStartTime.current;
-      await fetch('/api/recommendations/user-sessions', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId,
-          sessionFlow: sessionMetrics.current,
-          durationMs,
-          endedAt: new Date().toISOString(),
-        }),
-      });
-    } catch (err) {
-      console.error('Error ending session:', err);
-    }
-  }, [sessionId]);
-
-  // Запись события
+  // Оптимизированная запись события (с батчингом)
   const trackEvent = useCallback(async (
     eventType: string,
     eventData?: Record<string, unknown>
   ) => {
     if (!sessionId) return;
 
-    try {
-      await fetch('/api/recommendations/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          sessionId,
-          recommendationLogId: logId || undefined,
-          eventType,
-          eventData,
-          timestamp: new Date().toISOString(),
-        }),
-      });
-    } catch (err) {
-      console.error('Error tracking event:', err);
-    }
-  }, [userId, sessionId, logId]);
+    const payload: EventPayload = {
+      userId,
+      sessionId,
+      recommendationLogId: logId || undefined,
+      eventType,
+      eventData,
+      timestamp: new Date().toISOString(),
+    };
 
-  // Запись сигнала намерения
+    // Добавляем в батч вместо немедленной отправки
+    eventSender.add(payload, '/api/recommendations/events');
+  }, [userId, sessionId, logId, eventSender]);
+
+  // Оптимизированная запись сигнала (с батчингом)
   const trackSignal = useCallback(async (
     signalType: string,
     elementContext?: { elementType: string; elementPosition: { x: number; y: number; viewportPercentage: number }; elementVisibility: number },
@@ -153,36 +236,30 @@ export function useSessionTracking(userId: string, logId: string | null) {
   ) => {
     if (!sessionId) return;
 
-    try {
-      const now = Date.now();
-      const temporalContext = logId ? {
-        timeSinceShownMs: now - sessionStartTime.current,
-        timeSinceSessionStartMs: now - sessionStartTime.current,
-        timeOfDay: new Date().getHours(),
-        dayOfWeek: new Date().getDay(),
-      } : undefined;
+    const now = Date.now();
+    const temporalContext = logId ? {
+      timeSinceShownMs: now - sessionStartTime.current,
+      timeSinceSessionStartMs: now - sessionStartTime.current,
+      timeOfDay: new Date().getHours(),
+      dayOfWeek: new Date().getDay(),
+    } : undefined;
 
-      await fetch('/api/recommendations/signals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          sessionId,
-          recommendationLogId: logId || undefined,
-          signalType,
-          elementContext,
-          temporalContext,
-          rawSignals,
-        }),
-      });
-    } catch (err) {
-      console.error('Error tracking signal:', err);
-    }
-  }, [userId, sessionId, logId]);
+    const payload: SignalPayload = {
+      userId,
+      sessionId,
+      recommendationLogId: logId || undefined,
+      signalType,
+      elementContext,
+      temporalContext,
+      rawSignals,
+    };
 
-  // Начало сессии фильтров
+    signalSender.add(payload, '/api/recommendations/signals');
+  }, [userId, sessionId, logId, signalSender]);
+
+  // Начало сессии фильтров (debounced)
   const startFilterSession = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || filterSessionId) return;
 
     try {
       const res = await fetch('/api/recommendations/filter-sessions', {
@@ -197,7 +274,7 @@ export function useSessionTracking(userId: string, logId: string | null) {
           },
         }),
       });
-      const data: FilterSessionResponse = await res.json();
+      const data = await res.json();
       if (data.success) {
         setFilterSessionId(data.filterSessionId);
         filterChanges.current = [];
@@ -205,10 +282,10 @@ export function useSessionTracking(userId: string, logId: string | null) {
     } catch (err) {
       console.error('Error starting filter session:', err);
     }
-  }, [userId, sessionId]);
+  }, [userId, sessionId, filterSessionId]);
 
-  // Запись изменения фильтра
-  const trackFilterChange = useCallback(async (
+  // Оптимизированное отслеживание изменений фильтров
+  const trackFilterChange = useCallback((
     parameterName: string,
     previousValue: unknown,
     newValue: unknown
@@ -226,32 +303,38 @@ export function useSessionTracking(userId: string, logId: string | null) {
     filterChanges.current.push(change);
     sessionMetrics.current.filtersChangedCount++;
 
-    // Записываем событие
-    await trackEvent('filter_change', change);
+    // Записываем событие в батч
+    trackEvent('filter_change', change);
 
-    // Обновляем сессию фильтров
+    // Обновляем сессию фильтров (debounced)
     if (filterSessionId) {
-      try {
-        await fetch('/api/recommendations/filter-sessions', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filterSessionId,
-            filterChanges: filterChanges.current,
-          }),
-        });
-      } catch (err) {
-        console.error('Error updating filter session:', err);
-      }
+      const updateFilterSession = async () => {
+        try {
+          await fetch('/api/recommendations/filter-sessions', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filterSessionId,
+              filterChanges: filterChanges.current,
+            }),
+          });
+        } catch (err) {
+          console.error('Error updating filter session:', err);
+        }
+      };
+      
+      // Debounce обновления
+      setTimeout(updateFilterSession, 500);
     }
   }, [sessionId, filterSessionId, trackEvent]);
 
-  // Отслеживание открытия модального окна
+  // Отслеживание открытия модального окна (оптимизировано)
   const handleModalOpen = useCallback(() => {
     sessionMetrics.current.modalOpenedCount++;
+    // Не отправляем немедленно, добавляем в батч
     trackEvent('action_click', {
       action: 'open_details',
-      timeSinceShownMs: 0, // Will be set by caller
+      timeSinceShownMs: 0,
     });
     trackSignal('element_visible', {
       elementType: 'overview',
@@ -277,6 +360,12 @@ export function useSessionTracking(userId: string, logId: string | null) {
     sessionMetrics.current.recommendationsSkipped++;
   }, []);
 
+  // Принудительная отправка всех pending данных
+  const flushPending = useCallback(async () => {
+    await eventSender.flush();
+    await signalSender.flush();
+  }, [eventSender, signalSender]);
+
   return {
     sessionId,
     filterSessionId,
@@ -289,6 +378,6 @@ export function useSessionTracking(userId: string, logId: string | null) {
     incrementActionsCount,
     incrementRecommendationsAccepted,
     incrementRecommendationsSkipped,
-    endSession,
+    flushPending,
   };
 }

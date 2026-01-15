@@ -310,7 +310,7 @@ model Blacklist {
 model RecommendationEvent {
   id            String   @id @default(cuid())
   userId        String   // Денормализованное поле для быстрого доступа к пользователю
-  parentLogId   String   // Ссылка на родительскую RecommendationLog
+  parentLogId   String?  // Ссылка на родительскую RecommendationLog (опционально для событий уровня сессии)
   eventType     String   // Тип события: page_view, filter_change, recommendation_shown, modal_open, modal_close, hover_start, hover_end, action_click, scroll, tap, swipe, keyboard_shortcut
   eventData     Json?    // Параметры события (структура зависит от типа)
   sessionState  Json?    // Состояние сессии на момент события
@@ -318,8 +318,8 @@ model RecommendationEvent {
   timestamp     DateTime @default(now())
   deviceContext Json?    // Технический контекст: устройство, браузер, разрешение и т.д.
 
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parentLog     RecommendationLog @relation(fields: [parentLogId], references: [id], onDelete: Cascade)
+  user          User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentLog     RecommendationLog? @relation(fields: [parentLogId], references: [id], onDelete: Cascade)
 
   @@index([parentLogId, timestamp])
   @@index([userId, timestamp])
@@ -332,13 +332,13 @@ model RecommendationEvent {
 model FilterSession {
   id            String   @id @default(cuid())
   userId        String
-  sessionId     String   // Идентификатор сессии (связь с UserSession)
+  sessionId     String?  // Идентификатор сессии (связь с UserSession, опционально)
   startedAt     DateTime @default(now())
   endedAt       DateTime?
   durationMs    Int?
 
   // Состояния фильтров
-  initialState  Json     // Конфигурация при первом изменении
+  initialState  Json?    // Конфигурация при первом изменении (опционально)
   finalState    Json?    // Конфигурация на момент завершения
   changesHistory Json?   // Массив всех изменений с временными метками
 
@@ -349,8 +349,8 @@ model FilterSession {
   status        String   @default("active") // active, completed, abandoned
   completedAt   DateTime?
 
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userSession   UserSession? @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  user          User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userSession   UserSession? @relation(fields: [sessionId], references: [sessionId], onDelete: SetNull)
 
   @@index([userId, startedAt])
   @@index([status, startedAt])
@@ -396,7 +396,7 @@ model UserSession {
 model IntentSignal {
   id              String   @id @default(cuid())
   userId          String
-  recommendationLogId String
+  recommendationLogId String? // Ссылка на RecommendationLog (опционально)
 
   signalType      String   // hover_duration, dwell_time, scroll_depth, content_expansion, comparison_view, repeat_view, bookmark_action, tab_switch, minimize_window, rotation
   intensityScore  Float    // Нормализованная сила сигнала от 0 до 1
@@ -409,8 +409,8 @@ model IntentSignal {
 
   createdAt       DateTime @default(now())
 
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recommendationLog RecommendationLog @relation(fields: [recommendationLogId], references: [id], onDelete: Cascade)
+  user            User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendationLog RecommendationLog? @relation(fields: [recommendationLogId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([recommendationLogId, signalType])
