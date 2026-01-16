@@ -847,7 +847,7 @@ export default function RatingInfoModal({
                   <div className="space-y-1">
                     <span className="text-xs sm:text-sm text-gray-400">Жанр</span>
                     <div className="flex flex-wrap gap-1">
-                      {genres.map((genre, index) => (
+                      {genres.filter(Boolean).map((genre, index) => (
                         <span 
                           key={index}
                           className="text-xs sm:text-sm text-white bg-blue-500/10 px-2 py-1 rounded-md"

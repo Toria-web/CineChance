@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 import { rateLimit } from '@/middleware/rateLimit';
 
 export async function GET(req: Request) {
-  const { success } = await rateLimit(req, 'default');
+  const { success } = await rateLimit(req, '/api/movie-details');
   if (!success) {
     return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
   }
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     }
 
     const res = await fetch(
-      `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${apiKey}&language=ru-RU&append_to_response=credits`
+      `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${apiKey}&language=ru-RU&append_to_response=credits,keywords`
     );
 
     if (!res.ok) {
@@ -48,19 +48,13 @@ export async function GET(req: Request) {
       : null;
 
     // Проверяем, является ли контент аниме (по keyword "anime" ID 210024)
-    // Делаем отдельный запрос к keywords endpoint
+    // Ключевые слова уже получены в первом запросе
     let isAnime = false;
     try {
-      const keywordsRes = await fetch(
-        `https://api.themoviedb.org/3/${mediaType}/${tmdbId}/keywords?api_key=${apiKey}`
-      );
-      if (keywordsRes.ok) {
-        const keywordsData = await keywordsRes.json();
-        const keywords = keywordsData.keywords || keywordsData.results || [];
-        isAnime = keywords.some((k: any) => k.id === 210024 || k.name?.toLowerCase() === 'anime');
-      }
+      const keywords = data.keywords?.keywords || data.keywords?.results || [];
+      isAnime = keywords.some((k: any) => k.id === 210024 || k.name?.toLowerCase() === 'anime');
     } catch (kwError) {
-      logger.warn('Failed to fetch keywords for anime detection', { 
+      logger.warn('Failed to check keywords for anime detection', { 
         error: kwError instanceof Error ? kwError.message : String(kwError),
         context: 'MovieDetails'
       });

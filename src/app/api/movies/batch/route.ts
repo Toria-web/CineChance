@@ -15,7 +15,8 @@ const STATUS_FROM_DB: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  const { success } = await rateLimit(req, '/api/user');
+  // Use watchlist rate limit for batch operations
+  const { success } = await rateLimit(req, '/api/watchlist');
   if (!success) {
     return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
   }

@@ -5,9 +5,8 @@ import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from '@/middleware/rateLimit';
 
-export async function GET() {
-  const req = new Request('GET');
-  const { success } = await rateLimit(req, '/api/user');
+export async function GET(req: Request) {
+  const { success } = await rateLimit(req, '/api/watchlist');
   if (!success) {
     return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
   }

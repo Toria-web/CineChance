@@ -87,7 +87,7 @@ export async function GET(
         isBlacklisted,
       };
 
-      // Добавляем status и userRating только если они существуют
+      // Добавляем status и userRating только если фильм в watchlist
       if (watchlistData) {
         movieData.status = watchlistData.status;
         movieData.userRating = watchlistData.userRating;

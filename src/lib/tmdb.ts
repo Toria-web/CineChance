@@ -13,6 +13,8 @@ export interface Media {
   first_air_date?: string;
   overview: string;
   genre_ids?: number[];
+  genres?: { id: number; name: string }[];
+  production_countries?: { iso_3166_1: string; name: string }[];
   original_language?: string;
   adult?: boolean;
 }

@@ -6,7 +6,7 @@ import { authOptions } from '@/auth';
 import { rateLimit } from '@/middleware/rateLimit';
 
 export async function GET(req: Request) {
-  const { success } = await rateLimit(req, 'default');
+  const { success } = await rateLimit(req, '/api/cine-chance-rating');
   if (!success) {
     return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
   }

@@ -62,7 +62,6 @@ export default function MovieList({
                   initialWatchCount={batch.watchCount}
                   initialAverageRating={batch.averageRating}
                   initialRatingCount={batch.ratingCount}
-                  skipIndividualFetch={true}
                 />
               </MovieCardErrorBoundary>
             </div>

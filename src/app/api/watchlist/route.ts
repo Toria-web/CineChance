@@ -24,8 +24,8 @@ const STATUS_FROM_DB: Record<string, string> = {
 
 // GET: Получить статус фильма для текущего пользователя
 export async function GET(req: Request) {
-  // Apply rate limiting
-  const { success } = await rateLimit(req, '/api/user');
+  // Apply rate limiting for watchlist
+  const { success } = await rateLimit(req, '/api/watchlist');
   if (!success) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
@@ -80,8 +80,8 @@ export async function GET(req: Request) {
 
 // POST: Добавить или обновить статус
 export async function POST(req: Request) {
-  // Apply rate limiting
-  const { success } = await rateLimit(req, '/api/user');
+  // Apply rate limiting for watchlist
+  const { success } = await rateLimit(req, '/api/watchlist');
   if (!success) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
@@ -357,8 +357,8 @@ export async function POST(req: Request) {
 
 // DELETE: Удалить из списка
 export async function DELETE(req: Request) {
-  // Apply rate limiting
-  const { success } = await rateLimit(req, '/api/user');
+  // Apply rate limiting for watchlist
+  const { success } = await rateLimit(req, '/api/watchlist');
   if (!success) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }

@@ -108,7 +108,8 @@ export default function PersonClient({ personId }: PersonClientProps) {
           person.filmography.forEach(item => {
             const key = `${item.id}-${item.media_type}`;
             const movieData = data[key];
-            if (movieData && movieData.status) {
+            // Добавляем в Map если фильм есть в watchlist (статус может быть null, undefined или конкретным значением)
+            if (movieData) {
               statuses.set(`${item.media_type}_${item.id}`, {
                 tmdbId: item.id,
                 mediaType: item.media_type,
@@ -363,7 +364,8 @@ export default function PersonClient({ personId }: PersonClientProps) {
                           <MovieCard
                             movie={movie as Media}
                             restoreView={false}
-                            initialStatus={watchlistStatus?.status || undefined}
+                            initialStatus={watchlistStatus?.status}
+                            initialUserRating={watchlistStatus?.userRating}
                             showRatingBadge
                             priority={index < 6}
                           />

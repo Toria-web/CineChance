@@ -4,15 +4,13 @@
 import { useState, useRef, useEffect, useMemo, useCallback, useContext } from 'react';
 import Image from 'next/image';
 import { Media } from '@/lib/tmdb';
-import dynamic from 'next/dynamic';
-const RatingModal = dynamic(() => import('./RatingModal'), { ssr: false });
-const RatingInfoModal = dynamic(() => import('./RatingInfoModal'), { ssr: false });
+import RatingModal from './RatingModal';
+import RatingInfoModal from './RatingInfoModal';
 import { calculateCineChanceScore } from '@/lib/calculateCineChanceScore';
 import MoviePoster from './MoviePoster';
 import StatusOverlay from './StatusOverlay';
 import { logger } from '@/lib/logger';
 import { useBlacklist } from './BlacklistContext';
-import { STATIC_BLUR_PLACEHOLDER } from '@/lib/blurPlaceholder';
 
 const RATING_TEXTS: Record<number, string> = {
   1: 'Хуже некуда',
@@ -40,7 +38,6 @@ interface MovieCardProps {
   initialWatchCount?: number;
   initialAverageRating?: number | null;
   initialRatingCount?: number;
-  skipIndividualFetch?: boolean; // Skip individual API calls when batch loading
 }
 
 export default function MovieCard({ 
@@ -53,8 +50,7 @@ export default function MovieCard({
   initialUserRating, 
   initialWatchCount, 
   initialAverageRating, 
-  initialRatingCount,
-  skipIndividualFetch = false,
+  initialRatingCount 
 }: MovieCardProps) {
   const [showOverlay, setShowOverlay] = useState(false);
   const [status, setStatus] = useState<MediaStatus>(initialStatus ?? null);
@@ -155,8 +151,7 @@ export default function MovieCard({
 
     const fetchData = async () => {
       try {
-        // Skip individual fetching when in batch mode
-        if (initialStatus === undefined && !skipIndividualFetch) {
+        if (initialStatus === undefined) {
           const statusRes = await fetch(`/api/watchlist?tmdbId=${movie.id}&mediaType=${movie.media_type}`);
           if (statusRes.ok) {
             const data = await statusRes.json();
@@ -172,8 +167,7 @@ export default function MovieCard({
       }
     };
 
-    // Only fetch individually if not in batch mode and initialStatus is undefined
-    if (initialStatus === undefined && !skipIndividualFetch) {
+    if (initialStatus === undefined) {
       fetchData();
     }
     
@@ -182,6 +176,68 @@ export default function MovieCard({
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, [movie.id, movie.media_type, restoreView, initialIsBlacklisted, initialStatus, isBlacklistLoading, checkBlacklist]);
+
+  // Загрузка данных при открытии RatingInfoModal
+  useEffect(() => {
+    if (!isRatingInfoOpen) return;
+
+    const fetchData = async () => {
+      // Параллельная загрузка рейтинга и деталей фильма
+      const promises: Promise<unknown>[] = [];
+
+      // Загрузка рейтинга CineChance (если не передан)
+      if (cineChanceRating === null && movie.id && movie.media_type) {
+        promises.push(
+          fetch(`/api/cine-chance-rating?tmdbId=${movie.id}&mediaType=${movie.media_type}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.averageRating !== undefined) {
+                setCineChanceRating(data.averageRating);
+              }
+              if (data.count !== undefined) {
+                setCineChanceVoteCount(data.count);
+              }
+            })
+            .catch(error => {
+              logger.error('Failed to fetch CineChance rating', { tmdbId: movie.id, mediaType: movie.media_type, error });
+            })
+        );
+      }
+
+      // Загрузка деталей фильма (если ещё не загружены)
+      if (!movieDetails && movie.id && movie.media_type) {
+        promises.push(
+          fetch(`/api/movie-details?tmdbId=${movie.id}&mediaType=${movie.media_type}`)
+            .then(res => res.json())
+            .then(data => {
+              setMovieDetails({
+                genres: data.genres || [],
+                runtime: data.runtime || 0,
+                adult: data.adult || false,
+                productionCountries: data.productionCountries || [],
+                seasonNumber: data.seasonNumber || null,
+                isAnime: data.isAnime || false,
+                collectionName: data.collectionName || null,
+                collectionId: data.collectionId || null,
+                cast: (data.cast || []).map((c: { id: number; name: string; character: string; profilePath: string | null }) => ({
+                  id: c.id,
+                  name: c.name,
+                  character: c.character,
+                  profilePath: c.profilePath
+                }))
+              });
+            })
+            .catch(error => {
+              logger.error('Failed to fetch movie details', { tmdbId: movie.id, mediaType: movie.media_type, error });
+            })
+        );
+      }
+
+      await Promise.all(promises);
+    };
+
+    fetchData();
+  }, [isRatingInfoOpen, movie.id, movie.media_type, cineChanceRating, movieDetails]);
 
   // Обработчик клика вне оверлея
   useEffect(() => {
@@ -320,7 +376,7 @@ export default function MovieCard({
   };
 
   const getStatusIcon = () => {
-    if (restoreView || isBlacklisted) {
+    if (restoreView) {
       return (
         <div className="absolute top-2 right-2 z-10 bg-gray-800 rounded-full p-1.5 shadow-lg border border-gray-600">
           <div className="w-4 h-4 flex items-center justify-center">
@@ -330,42 +386,61 @@ export default function MovieCard({
       );
     }
 
+    let statusIcon = null;
     switch (status) {
       case 'want':
-        return (
+        statusIcon = (
           <div className="absolute top-2 right-2 z-10 bg-white rounded-full p-1.5 shadow-lg">
             <div className="w-4 h-4 flex items-center justify-center">
               <span className="text-blue-500 text-lg font-bold leading-none" style={{ marginTop: '-1px' }}>+</span>
             </div>
           </div>
         );
+        break;
       case 'watched':
-        return (
+        statusIcon = (
           <div className="absolute top-2 right-2 z-10 bg-green-500 rounded-full p-1.5 shadow-lg">
             <div className="w-4 h-4 flex items-center justify-center">
               <span className="text-white text-sm font-bold leading-none" style={{ marginTop: '-1px' }}>✓</span>
             </div>
           </div>
         );
+        break;
       case 'dropped':
-        return (
+        statusIcon = (
           <div className="absolute top-2 right-2 z-10 bg-red-500 rounded-full p-1.5 shadow-lg">
             <div className="w-4 h-4 flex items-center justify-center">
               <span className="text-white text-base font-bold leading-none flex items-center justify-center h-full">×</span>
             </div>
           </div>
         );
+        break;
       case 'rewatched':
-        return (
+        statusIcon = (
           <div className="absolute top-2 right-2 z-10 bg-purple-500 rounded-full p-1.5 shadow-lg">
             <div className="w-4 h-4 flex items-center justify-center">
               <span className="text-white text-sm font-bold leading-none" style={{ marginTop: '-1px' }}>↻</span>
             </div>
           </div>
         );
-      default:
-        return null;
+        break;
     }
+
+    // Если в черном списке - показываем иконку статуса + иконку блокировки
+    if (isBlacklisted) {
+      return (
+        <>
+          {statusIcon}
+          <div className="absolute top-2 right-2 z-20 bg-gray-800 rounded-full p-1.5 shadow-lg border border-gray-600" style={{ transform: 'translate(8px, -8px)' }}>
+            <div className="w-4 h-4 flex items-center justify-center">
+              <span className="text-gray-300 text-sm font-bold">🚫</span>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    return statusIcon;
   };
 
   const handlePosterClick = () => {
@@ -509,12 +584,9 @@ export default function MovieCard({
               className={`object-cover transition-transform duration-500 ${
                 isHovered && !showOverlay ? 'scale-105' : ''
               }`}
-              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+              sizes="(max-width: 640px) 48vw, (max-width: 768px) 31vw, (max-width: 1024px) 23vw, (max-width: 1280px) 19vw, 15vw"
               loading={priority ? "eager" : "lazy"}
-              placeholder="blur"
-              blurDataURL={STATIC_BLUR_PLACEHOLDER}
               onError={handlePosterError}
-              quality={85}
             />
           </div>
 
