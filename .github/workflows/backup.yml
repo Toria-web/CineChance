@@ -1,4 +1,4 @@
-name: Test Yandex Disk
+name: Test Yandex Disk API
 
 on:
   workflow_dispatch
@@ -8,41 +8,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install rclone
-        run: curl -fsSL https://rclone.org/install.sh | sudo bash
-
-      - name: Configure rclone for Yandex Disk
-        run: |
-          mkdir -p ~/.config/rclone
-
-          # Сначала "замаскируем" токен для rclone
-          OBSCURED_TOKEN=$(rclone obscure "${{ secrets.YANDEX_DISK_TOKEN }}")
-
-          # Создаем конфиг с замаскированным токеном
-          cat > ~/.config/rclone/rclone.conf << EOF
-          [yandex]
-          type = webdav
-          url = https://webdav.yandex.ru
-          vendor = other
-          user = oauth
-          pass = ${OBSCURED_TOKEN}
-          EOF
-
-          echo "Config created with obscured token"
-
-      - name: List remotes
-        run: rclone listremotes
-
-      - name: Create folder on Yandex Disk
-        run: rclone mkdir yandex:/CineChanceTest || echo "Folder exists"
-
       - name: Create test file
         run: |
           echo "Test from GitHub Actions - $(date)" > test_file.txt
           echo "Timestamp: $(date +%Y%m%d_%H%M%S)" >> test_file.txt
+          cat test_file.txt
 
-      - name: Upload test file
-        run: rclone copy test_file.txt yandex:/CineChanceTest/ -v
+      - name: Upload to Yandex Disk via API
+        run: |
+          TOKEN="${{ secrets.YANDEX_DISK_TOKEN }}"
+          FILENAME="test_file.txt"
+          UPLOAD_URL="https://cloud-api.yandex.net/v1/disk/resources/test_file.txt"
 
-      - name: Verify upload
-        run: rclone ls yandex:/CineChanceTest/
+          # Загружаем файл через Yandex Disk API
+          echo "=== Uploading $FILENAME to Yandex Disk ==="
+          curl -X PUT \
+            -H "Authorization: OAuth $TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$FILENAME" \
+            "$UPLOAD_URL" \
+            -v 2>&1 | head -50
+
+      - name: Check if file exists
+        run: |
+          TOKEN="${{ secrets.YANDEX_DISK_TOKEN }}"
+          CHECK_URL="https://cloud-api.yandex.net/v1/disk/resources/test_file.txt"
+
+          echo "=== Checking file ==="
+          curl -H "Authorization: OAuth $TOKEN" "$CHECK_URL" 2>/dev/null | head -10
