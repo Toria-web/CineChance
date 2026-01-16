@@ -32,6 +32,7 @@ jobs:
           echo "DATABASE_URL is configured"
 
       - name: Create database backup
+        id: create-backup
         run: |
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
           FILENAME="cinechance_backup_${TIMESTAMP}.sql.gz"
@@ -84,6 +85,7 @@ jobs:
           DEST_PATH="/CineChanceBackups/$FILENAME"
 
           echo "=== Uploading $FILENAME to Yandex Disk ==="
+          echo "Destination: $DEST_PATH"
 
           # Step 1: Get upload URL
           echo "Getting upload URL..."
