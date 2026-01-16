@@ -25,25 +25,33 @@ jobs:
             "https://cloud-api.yandex.net/v1/disk/resources?path=$FOLDER_PATH" \
             -w "\nHTTP Status: %{http_code}\n"
 
-      - name: Upload file to folder
+      - name: Get upload URL and upload file
         run: |
           TOKEN="${{ secrets.YANDEX_DISK_TOKEN }}"
           FILENAME="test_file.txt"
           DEST_PATH="/CineChanceBackups/test_file.txt"
 
-          echo "=== Uploading $FILENAME to $DEST_PATH ==="
+          echo "=== Step 1: Getting upload URL ==="
+          UPLOAD_URL=$(curl -X GET \
+            -H "Authorization: OAuth $TOKEN" \
+            "https://cloud-api.yandex.net/v1/disk/resources/upload?path=$DEST_PATH" \
+            2>/dev/null | grep -o '"href":"[^"]*"' | cut -d'"' -f4)
+
+          echo "Upload URL: $UPLOAD_URL"
+
+          echo ""
+          echo "=== Step 2: Uploading file ==="
           curl -X PUT \
             -H "Authorization: OAuth $TOKEN" \
-            -H "Content-Type: application/octet-stream" \
             --data-binary @"$FILENAME" \
-            "https://cloud-api.yandex.net/v1/disk/resources?path=$DEST_PATH" \
+            "$UPLOAD_URL" \
             -w "\nHTTP Status: %{http_code}\n"
 
       - name: Verify file exists
         run: |
           TOKEN="${{ secrets.YANDEX_DISK_TOKEN }}"
 
-          echo "=== List files in /CineChanceBackups ==="
+          echo "=== Files in /CineChanceBackups ==="
           curl -H "Authorization: OAuth $TOKEN" \
             "https://cloud-api.yandex.net/v1/disk/resources?path=/CineChanceBackups" \
-            2>/dev/null | grep -o '"name":"[^"]*"' | head -5
+            2>/dev/null | grep -o '"name":"[^"]*"'
