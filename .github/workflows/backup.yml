@@ -17,8 +17,13 @@ jobs:
       
       - name: Install PostgreSQL client
         run: |
+          # Добавляем репозиторий PostgreSQL для версии 17.x (совместимо с Neon 17.7)
           sudo apt-get update
-          sudo apt-get install -y postgresql-client gzip
+          sudo apt-get install -y wget gnupg2 lsb-release
+          wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+          echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17 gzip
       
       - name: Debug - Show connection info
         run: |
