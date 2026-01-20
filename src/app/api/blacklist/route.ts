@@ -1,18 +1,18 @@
 // src/app/api/blacklist/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from "@/auth";
-import { prisma } from "@/lib/prisma";
-import { logger } from "@/lib/logger";
+import { authOptions } from '@/auth';
+import { prisma } from '@/lib/prisma';
+import { logger } from '@/lib/logger';
 import { rateLimit } from '@/middleware/rateLimit';
 
-// GET: Проверить, заблокирован ли фильм (опционально, можно использовать для карточки)
+// GET: Проверить, заблокирован ли фильм
 export async function GET(req: Request) {
   const { success } = await rateLimit(req, '/api/user');
   if (!success) {
     return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
   }
-  
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -27,6 +27,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ isBlacklisted: false });
     }
 
+    // Оптимизированный запрос - используем select
     const record = await prisma.blacklist.findUnique({
       where: {
         userId_tmdbId_mediaType: {
@@ -35,13 +36,14 @@ export async function GET(req: Request) {
           mediaType,
         },
       },
+      select: { id: true },
     });
 
     return NextResponse.json({ isBlacklisted: !!record });
   } catch (error) {
-    logger.error('Blacklist GET error', { 
+    logger.error('Blacklist GET error', {
       error: error instanceof Error ? error.message : String(error),
-      context: 'Blacklist'
+      context: 'Blacklist',
     });
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
   if (!success) {
     return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
   }
-  
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -77,13 +79,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    // Игнорируем ошибку дубликата (Prisma P2002), если фильм уже в списке
     if ((error as any).code === 'P2002') {
-       return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true });
     }
-    logger.error('Blacklist POST error', { 
+    logger.error('Blacklist POST error', {
       error: error instanceof Error ? error.message : String(error),
-      context: 'Blacklist'
+      context: 'Blacklist',
     });
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
@@ -95,7 +96,7 @@ export async function DELETE(req: Request) {
   if (!success) {
     return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
   }
-  
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -119,9 +120,9 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    logger.error('Blacklist DELETE error', { 
+    logger.error('Blacklist DELETE error', {
       error: error instanceof Error ? error.message : String(error),
-      context: 'Blacklist'
+      context: 'Blacklist',
     });
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

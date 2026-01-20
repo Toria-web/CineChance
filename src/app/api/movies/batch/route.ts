@@ -56,14 +56,20 @@ export async function POST(req: Request) {
       const mediaTypes = Array.from(new Set(movies.map(m => m.mediaType)));
       
       // Получаем watchlist данные - используем where IN для эффективности
+      // Оптимизировано: используем select вместо include
       const watchlistRecords = await prisma.watchList.findMany({
         where: {
           userId,
           tmdbId: { in: movieIds },
           mediaType: { in: mediaTypes },
         },
-        include: {
-          status: true,
+        select: {
+          tmdbId: true,
+          mediaType: true,
+          status: { select: { name: true } },
+          userRating: true,
+          watchedDate: true,
+          watchCount: true,
         },
       });
 

@@ -53,11 +53,17 @@ export async function GET(
     }
 
     // Получаем все watchlist статусы пользователя одним запросом
+    // Оптимизировано: используем select вместо include
     let watchlistMap: Map<string, { status: string | null; userRating: number | null }> = new Map();
     if (userId) {
       const watchlist = await prisma.watchList.findMany({
         where: { userId },
-        include: { status: true }
+        select: {
+          tmdbId: true,
+          mediaType: true,
+          status: { select: { name: true } },
+          userRating: true,
+        }
       });
       watchlist.forEach((item) => {
         watchlistMap.set(`${item.mediaType}_${item.tmdbId}`, { 

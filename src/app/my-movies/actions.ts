@@ -95,13 +95,19 @@ export async function fetchMoviesByStatus(
     }
   }
 
+  // Оптимизированный запрос - выбираем только необходимые поля
   const watchListRecords = await prisma.watchList.findMany({
     where: whereClause,
-    include: { 
-      status: true,
-      tags: {
-        select: { id: true, name: true }
-      }
+    select: {
+      id: true,
+      tmdbId: true,
+      mediaType: true,
+      title: true,
+      voteAverage: true,
+      userRating: true,
+      addedAt: true,
+      status: { select: { name: true } },
+      tags: { select: { id: true, name: true } },
     },
     orderBy: { addedAt: 'desc' },
   });
@@ -161,8 +167,10 @@ export async function fetchMoviesByStatus(
   let hiddenTotalCount = 0;
 
   if (includeHidden && page === 1) {
+    // Оптимизированный запрос - выбираем только необходимые поля
     const blacklistRecords = await prisma.blacklist.findMany({
       where: { userId },
+      select: { tmdbId: true, mediaType: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
 

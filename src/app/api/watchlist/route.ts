@@ -45,6 +45,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing params' }, { status: 400 });
     }
 
+    // Оптимизированный запрос - загружаем только необходимые поля
     const record = await prisma.watchList.findUnique({
       where: {
         userId_tmdbId_mediaType: {
@@ -53,8 +54,11 @@ export async function GET(req: Request) {
           mediaType,
         },
       },
-      include: {
-        status: true,
+      select: {
+        status: { select: { name: true } },
+        userRating: true,
+        watchedDate: true,
+        watchCount: true,
       },
     });
 

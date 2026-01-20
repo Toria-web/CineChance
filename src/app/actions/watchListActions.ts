@@ -43,24 +43,20 @@ export async function toggleMediaStatus(movie: Media, newStatus: StatusType) {
           tmdbId,
           mediaType,
         },
-      } as any,
+      },
       update: {
         statusId,
         title: movie.title || movie.name || 'Без названия',
-        poster_path: movie.poster_path || null,
         voteAverage: movie.vote_average || 0,
-        release_date: movie.release_date || movie.first_air_date || null,
-      } as any,
+      },
       create: {
         userId,
         tmdbId,
         mediaType,
         statusId,
         title: movie.title || movie.name || 'Без названия',
-        poster_path: movie.poster_path || null,
         voteAverage: movie.vote_average || 0,
-        release_date: movie.release_date || movie.first_air_date || null,
-      } as any,
+      },
     });
   }
 

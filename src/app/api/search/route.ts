@@ -115,15 +115,21 @@ export async function GET(request: Request) {
         const listSession = await getServerSession(authOptions);
         
         if (listSession?.user?.id) {
+          // Оптимизированные запросы - загружаем только необходимые поля
           // Get user's watchlist
           const watchlist = await prisma.watchList.findMany({
             where: { userId: listSession.user.id as string },
-            include: { status: true },
+            select: {
+              tmdbId: true,
+              mediaType: true,
+              status: { select: { name: true } },
+            },
           });
           
           // Get user's blacklist
           const blacklist = await prisma.blacklist.findMany({
             where: { userId: listSession.user.id as string },
+            select: { tmdbId: true },
           });
 
           // Create maps for quick lookup
