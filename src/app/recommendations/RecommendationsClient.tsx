@@ -11,6 +11,7 @@ import { useSessionTracking } from './useSessionTracking';
 import { logger } from '@/lib/logger';
 import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { ContentType, ListType } from '@/lib/recommendation-types';
+import { getUserTags } from '@/app/actions/tagsActions';
 
 // Типы данных
 interface MovieData {
@@ -103,6 +104,7 @@ export default function RecommendationsClient({ userId }: RecommendationsClientP
     includeDropped: false,
   });
   const [availableGenres, setAvailableGenres] = useState<{ id: number; name: string }[]>([]);
+  const [userTags, setUserTags] = useState<Array<{ id: string; name: string; count: number }>>([]);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true); // Флаг загрузки настроек
   const fetchStartTime = useRef<number>(0);
   const [currentFilters, setCurrentFilters] = useState<{
@@ -155,7 +157,24 @@ export default function RecommendationsClient({ userId }: RecommendationsClientP
       }
     };
     fetchGenres();
+    fetchUserTags();
   }, []);
+
+  // Загружаем теги пользователя
+  const fetchUserTags = async () => {
+    try {
+      const result = await getUserTags(userId);
+      if (result.success && result.data) {
+        setUserTags(result.data.map(tag => ({
+          id: tag.id,
+          name: tag.name,
+          count: tag.usageCount
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching user tags:', error);
+    }
+  };
 
   // Получение года из даты
   const getYear = (movieData: MovieData) => {
@@ -473,6 +492,7 @@ export default function RecommendationsClient({ userId }: RecommendationsClientP
                           initialTypes={filters.types}
                           initialLists={filters.lists}
                           availableGenres={availableGenres}
+                          userTags={userTags}
                           onTypeChange={(types) => updateFilter('types', types)}
                           onListChange={(lists) => updateFilter('lists', lists)}
                           onAdditionalFilterChange={(additionalFilters) => {

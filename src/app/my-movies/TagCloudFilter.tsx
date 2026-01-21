@@ -124,12 +124,6 @@ export default function TagCloudFilter({
               }}
             >
               <span className="relative z-10">{tag.name}</span>
-              <span className={`
-                ml-1 text-[9px] font-medium
-                ${isSelected ? 'text-blue-200' : 'text-gray-500'}
-              `}>
-                {tag.count}
-              </span>
 
               {/* Active state indicator dot */}
               {isSelected && (

@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ContentType, ListType } from '@/lib/recommendation-types';
+import TagCloudFilter from '@/app/my-movies/TagCloudFilter';
 
 interface AdditionalFilters {
   minRating: number;
   yearFrom: string;
   yearTo: string;
   selectedGenres: number[];
+  selectedTags: string[];
 }
 
 interface FilterFormProps {
@@ -20,6 +22,7 @@ interface FilterFormProps {
   initialTypes?: ContentType[];
   initialLists?: ListType[];
   availableGenres?: { id: number; name: string }[];
+  userTags?: Array<{ id: string; name: string; count: number }>;
 }
 
 const defaultAdditionalFilters: AdditionalFilters = {
@@ -27,26 +30,8 @@ const defaultAdditionalFilters: AdditionalFilters = {
   yearFrom: '',
   yearTo: '',
   selectedGenres: [],
+  selectedTags: [],
 };
-
-const GENRES = [
-  { id: 28, name: 'Боевик' },
-  { id: 12, name: 'Приключения' },
-  { id: 16, name: 'Анимация' },
-  { id: 35, name: 'Комедия' },
-  { id: 80, name: 'Криминал' },
-  { id: 18, name: 'Драма' },
-  { id: 10751, name: 'Семейный' },
-  { id: 14, name: 'Фэнтези' },
-  { id: 36, name: 'История' },
-  { id: 27, name: 'Ужасы' },
-  { id: 10402, name: 'Музыка' },
-  { id: 9648, name: 'Детектив' },
-  { id: 10749, name: 'Мелодрама' },
-  { id: 878, name: 'Фантастика' },
-  { id: 53, name: 'Триллер' },
-  { id: 10752, name: 'Военный' },
-];
 
 export default function FilterForm({ 
   onSubmit, 
@@ -58,6 +43,7 @@ export default function FilterForm({
   initialTypes = ['movie', 'tv', 'anime'],
   initialLists = ['want', 'watched'],
   availableGenres = [],
+  userTags = [],
 }: FilterFormProps) {
   const [selectedTypes, setSelectedTypes] = useState<ContentType[]>(initialTypes);
   const [selectedLists, setSelectedLists] = useState<ListType[]>(initialLists);
@@ -145,7 +131,8 @@ export default function FilterForm({
   const hasActiveAdditionalFilters = additionalFilters.minRating > 0 ||
     additionalFilters.yearFrom ||
     additionalFilters.yearTo ||
-    additionalFilters.selectedGenres.length > 0;
+    additionalFilters.selectedGenres.length > 0 ||
+    additionalFilters.selectedTags.length > 0;
 
   const handleSubmit = () => {
     if (selectedTypes.length > 0 && selectedLists.length > 0) {
@@ -403,6 +390,21 @@ export default function FilterForm({
                 </div>
               </div>
             </div>
+
+            {/* Фильтр по тегам */}
+            {userTags.length > 0 && (
+              <TagCloudFilter
+                tags={userTags}
+                selectedTags={additionalFilters.selectedTags}
+                onTagsChange={(tags) => {
+                  const newFilters = { ...additionalFilters, selectedTags: tags };
+                  setAdditionalFilters(newFilters);
+                  if (onAdditionalFilterChange) {
+                    onAdditionalFilterChange(newFilters);
+                  }
+                }}
+              />
+            )}
 
             {/* Фильтр по жанрам */}
             <div>
