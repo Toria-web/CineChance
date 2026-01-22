@@ -27,7 +27,8 @@ export async function GET(
 
     // Получаем информацию об актере
     const personRes = await fetch(
-      `https://api.themoviedb.org/3/person/${personId}?api_key=${apiKey}&language=ru-RU`
+      `https://api.themoviedb.org/3/person/${personId}?api_key=${apiKey}&language=ru-RU`,
+      { next: { revalidate: 86400 } }
     );
 
     if (!personRes.ok) {
@@ -38,7 +39,8 @@ export async function GET(
 
     // Получаем фильмографию актера
     const creditsRes = await fetch(
-      `https://api.themoviedb.org/3/person/${personId}/combined_credits?api_key=${apiKey}&language=ru-RU`
+      `https://api.themoviedb.org/3/person/${personId}/combined_credits?api_key=${apiKey}&language=ru-RU`,
+      { next: { revalidate: 86400 } }
     );
 
     if (!creditsRes.ok) {

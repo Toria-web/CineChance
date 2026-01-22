@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import MovieCard from '@/app/components/MovieCard';
 import { MovieCardErrorBoundary } from '@/app/components/ErrorBoundary';
@@ -146,11 +147,14 @@ export default function CollectionClient({ collectionId }: { collectionId: strin
           <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 mb-6">
             {/* Постер коллекции */}
             {collection.poster_path && (
-              <div className="flex-shrink-0 mx-auto sm:mx-0">
-                <img
+              <div className="flex-shrink-0 mx-auto sm:mx-0 relative w-32 h-48 sm:w-44 sm:h-66">
+                <Image
                   src={`https://image.tmdb.org/t/p/w300${collection.poster_path}`}
                   alt={collection.name}
-                  className="w-32 h-48 sm:w-44 sm:h-66 object-cover rounded-lg shadow-lg"
+                  fill
+                  className="object-cover rounded-lg shadow-lg"
+                  sizes="(max-width: 640px) 128px, (max-width: 768px) 176px, 176px"
+                  quality={85}
                 />
               </div>
             )}

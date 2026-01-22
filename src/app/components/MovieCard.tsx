@@ -132,7 +132,14 @@ export default function MovieCard({
 
         // Blacklist data is now fetched via context - no individual API call needed
       } catch (error) {
-        logger.error('Failed to fetch watchlist data', { tmdbId: movie.id, mediaType: movie.media_type, error });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        logger.error('Failed to fetch watchlist data', { 
+          tmdbId: movie.id, 
+          mediaType: movie.media_type, 
+          error: errorMessage,
+          stack: errorStack 
+        });
       }
     };
 
@@ -168,7 +175,12 @@ export default function MovieCard({
               }
             })
             .catch(error => {
-              logger.error('Failed to fetch CineChance rating', { tmdbId: movie.id, mediaType: movie.media_type, error });
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              logger.error('Failed to fetch CineChance rating', { 
+                tmdbId: movie.id, 
+                mediaType: movie.media_type, 
+                error: errorMessage 
+              });
             })
         );
       }
@@ -197,7 +209,12 @@ export default function MovieCard({
               });
             })
             .catch(error => {
-              logger.error('Failed to fetch movie details', { tmdbId: movie.id, mediaType: movie.media_type, error });
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              logger.error('Failed to fetch movie details', { 
+                tmdbId: movie.id, 
+                mediaType: movie.media_type, 
+                error: errorMessage 
+              });
             })
         );
       }
@@ -271,7 +288,8 @@ export default function MovieCard({
           alert('Ошибка сохранения');
         }
       } catch (error) {
-        logger.error('Network error while saving rating', { tmdbId: movie.id, error });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error('Network error while saving rating', { tmdbId: movie.id, error: errorMessage });
         alert('Ошибка сети');
       }
     };
@@ -340,7 +358,12 @@ export default function MovieCard({
         }
       }
     } catch (error) {
-      logger.error('Network error while toggling blacklist', { tmdbId: movie.id, isBlacklisted: targetState, error });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Network error while toggling blacklist', { 
+        tmdbId: movie.id, 
+        isBlacklisted: targetState, 
+        error: errorMessage 
+      });
     }
   };
 

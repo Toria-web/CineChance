@@ -1,13 +1,14 @@
 // src/app/profile/components/ProfileOverviewClient.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const TermsOfServiceModal = dynamic(() => import('@/app/components/TermsOfServiceModal'), { ssr: false });
-import { FileText, Settings, Users, ArrowRight, Eye, Clock, Star, TrendingUp, Monitor, Tv, Film } from 'lucide-react';
+import { FileText, Settings, Users, ArrowRight, Clock, Star, TrendingUp, Monitor, Tv, Film, CheckIcon, PlusIcon, XIcon, BanIcon } from 'lucide-react';
 import NicknameEditor from './NicknameEditor';
 import Loader from '@/app/components/Loader';
 import '@/app/profile/components/AchievementCards.css';
@@ -60,39 +61,129 @@ interface ProfileOverviewClientProps {
   userId: string;
 }
 
+// Skeleton для информации о пользователе
+function UserInfoSkeleton() {
+  return (
+    <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-6 border border-gray-800 animate-pulse">
+      <div className="h-5 w-32 bg-gray-700 rounded mb-4"></div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="w-14 h-14 md:w-16 md:h-16 bg-gray-700 rounded-full flex-shrink-0"></div>
+        <div className="flex-1 w-full min-w-0 space-y-2">
+          <div className="h-5 w-48 bg-gray-700 rounded"></div>
+          <div className="h-4 w-64 bg-gray-800 rounded"></div>
+          <div className="h-4 w-32 bg-gray-800 rounded"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Skeleton для карточки статистики
+function StatsCardSkeleton() {
+  return (
+    <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800 animate-pulse">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-4 h-4 bg-gray-700 rounded"></div>
+        <div className="h-4 w-24 bg-gray-700 rounded"></div>
+      </div>
+      <div className="h-8 w-16 bg-gray-700 rounded"></div>
+    </div>
+  );
+}
+
+// Skeleton для прогресс-бара типов контента
+function TypeBreakdownSkeleton() {
+  return (
+    <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800 animate-pulse">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-4 h-4 bg-gray-700 rounded"></div>
+        <div className="h-4 w-24 bg-gray-700 rounded"></div>
+      </div>
+      <div className="space-y-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="w-5 h-5 bg-gray-700 rounded"></div>
+            <div className="flex-1">
+              <div className="flex justify-between items-center mb-1">
+                <div className="h-4 w-16 bg-gray-700 rounded"></div>
+                <div className="h-4 w-8 bg-gray-700 rounded"></div>
+              </div>
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full w-1/2 bg-gray-700 rounded-full"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Skeleton для средней оценки
+function AverageRatingSkeleton() {
+  return (
+    <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800 animate-pulse">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-4 h-4 bg-gray-700 rounded"></div>
+        <div className="h-4 w-24 bg-gray-700 rounded"></div>
+      </div>
+      <div className="flex items-end gap-3">
+        <div className="h-10 w-16 bg-gray-700 rounded"></div>
+        <div className="flex-1 pb-1">
+          <div className="flex gap-0.5 mb-1">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+              <div key={i} className="w-4 h-4 bg-gray-700 rounded"></div>
+            ))}
+          </div>
+          <div className="h-3 w-20 bg-gray-800 rounded"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Skeleton для горизонтального списка карточек (коллекции/актеры)
+function HorizontalListSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="flex items-center gap-2">
+        <div className="w-5 h-5 bg-gray-700 rounded"></div>
+        <div className="h-5 w-32 bg-gray-700 rounded"></div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex-shrink-0 w-28 sm:w-36">
+            <div className="aspect-[2/3] bg-gray-800 rounded-lg"></div>
+            <div className="mt-2 h-4 w-20 bg-gray-800 rounded"></div>
+            <div className="mt-1 h-3 w-16 bg-gray-900 rounded"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ProfileOverviewClient({ userId }: ProfileOverviewClientProps) {
   const [userData, setUserData] = useState<UserStatsData | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [errorDetails, setErrorDetails] = useState<string[]>([]);
-  const [retryCount, setRetryCount] = useState(0);
+  
+  // Отдельные состояния загрузки для каждого блока
+  const [userDataLoading, setUserDataLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [collections, setCollections] = useState<CollectionAchievement[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(true);
   const [actors, setActors] = useState<ActorAchievement[]>([]);
   const [actorsLoading, setActorsLoading] = useState(true);
 
-  // Загружаем данные пользователя клиентски для актуальности
+  // Загружаем данные пользователя (быстрый запрос)
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        setIsLoading(true);
-        setErrorDetails([]);
-
-        // Параллельная загрузка всех данных
-        const [profileResponse, statsResponse, collectionsResponse, actorsResponse] = await Promise.all([
-          fetch('/api/user/profile'),
-          fetch('/api/user/stats'),
-          fetch('/api/user/achiev_collection'),
-          fetch('/api/user/achiev_actors'),
-        ]);
-
-        let hasError = false;
-        let errors: string[] = [];
-
-        if (profileResponse.ok) {
-          const data = await profileResponse.json();
+        const res = await fetch('/api/user/profile');
+        if (res.ok) {
+          const data = await res.json();
           if (data.user) {
             setUserData({
               id: userId,
@@ -102,15 +193,23 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
               createdAt: new Date(data.user.createdAt),
             });
           }
-        } else {
-          hasError = true;
-          const errorText = await profileResponse.text().catch(() => 'Unknown error');
-          errors.push(`Профиль: ${profileResponse.status} - ${errorText}`);
-          console.error('Profile API error:', profileResponse.status, errorText);
         }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      } finally {
+        setUserDataLoading(false);
+      }
+    };
+    fetchUserData();
+  }, [userId]);
 
-        if (statsResponse.ok) {
-          const data = await statsResponse.json();
+  // Загружаем статистику (быстрый запрос)
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/user/stats');
+        if (res.ok) {
+          const data = await res.json();
           setStats({
             total: {
               watched: data.total?.watched || 0,
@@ -126,50 +225,57 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
             averageRating: data.averageRating || null,
             ratedCount: data.ratedCount || 0,
           });
-        } else {
-          const errorText = await statsResponse.text().catch(() => 'Unknown error');
-          errors.push(`Stats: ${statsResponse.status}`);
-          console.error('Stats API error:', statsResponse.status, errorText);
-        }
-
-        if (collectionsResponse.ok) {
-          const data = await collectionsResponse.json();
-          console.log('Collections API response:', data);
-          setCollections(Array.isArray(data) ? data.slice(0, 10) : []);
-        } else {
-          console.error('Collections API error:', collectionsResponse.status);
-        }
-        setCollectionsLoading(false);
-
-        if (actorsResponse.ok) {
-          const data = await actorsResponse.json();
-          console.log('Actors API response:', data);
-          setActors(Array.isArray(data) ? data.slice(0, 5) : []);
-        } else {
-          console.error('Actors API error:', actorsResponse.status);
-        }
-        setActorsLoading(false);
-
-        setErrorDetails(errors);
-
-        // Если произошла ошибка и данных нет, пробуем повторить через 3 секунды
-        if (hasError && !userData && retryCount < 3) {
-          console.warn(`Profile data failed to load, will retry (attempt ${retryCount + 1}/3)...`);
-          setRetryCount(prev => prev + 1);
-          setTimeout(() => {
-            fetchUserData();
-          }, 3000);
         }
       } catch (error) {
-        console.error('Failed to fetch user data', error);
-        setErrorDetails(['Ошибка сети: ' + (error instanceof Error ? error.message : 'Unknown error')]);
+        console.error('Failed to fetch stats:', error);
       } finally {
-        setIsLoading(false);
+        setStatsLoading(false);
       }
     };
+    fetchStats();
+  }, []);
 
-    fetchUserData();
-  }, [userId, retryCount]);
+  // Загружаем коллекции (медленный запрос - делаем в фоне)
+  useEffect(() => {
+    const fetchCollections = async () => {
+      try {
+        const res = await fetch('/api/user/achiev_collection');
+        if (res.ok) {
+          const data = await res.json();
+          setCollections(Array.isArray(data) ? data.slice(0, 5) : []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch collections:', error);
+      } finally {
+        setCollectionsLoading(false);
+      }
+    };
+    
+    // Небольшая задержка чтобы не блокировать основную загрузку
+    const timer = setTimeout(fetchCollections, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Загружаем актеров (медленный запрос - делаем в фоне)
+  useEffect(() => {
+    const fetchActors = async () => {
+      try {
+        const res = await fetch('/api/user/achiev_actors');
+        if (res.ok) {
+          const data = await res.json();
+          setActors(Array.isArray(data) ? data.slice(0, 5) : []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch actors:', error);
+      } finally {
+        setActorsLoading(false);
+      }
+    };
+    
+    // Небольшая задержка чтобы не блокировать основную загрузку
+    const timer = setTimeout(fetchActors, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Определяем мобильное устройство
   useEffect(() => {
@@ -182,48 +288,8 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4 md:space-y-6 px-4 sm:px-0">
-        <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-6 border border-gray-800">
-          <Loader text="Загрузка профиля..." />
-        </div>
-      </div>
-    );
-  }
-
-  if (!userData) {
-    return (
-      <div className="space-y-4 md:space-y-6 px-4 sm:px-0">
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-6">
-          <p className="text-red-300 font-medium mb-2">Не удалось загрузить данные профиля</p>
-          
-          {errorDetails.length > 0 && (
-            <div className="mt-3 space-y-1">
-              {errorDetails.map((error, index) => (
-                <p key={index} className="text-red-400 text-sm font-mono">
-                  {error}
-                </p>
-              ))}
-            </div>
-          )}
-          
-          <button
-            onClick={() => {
-              setRetryCount(0);
-              setErrorDetails([]);
-            }}
-            className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm transition"
-          >
-            Повторить загрузку
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const userEmail = userData.email || '';
-  const formattedBirthDate = userData.birthDate 
+  const userEmail = userData?.email || '';
+  const formattedBirthDate = userData?.birthDate 
     ? format(userData.birthDate, isMobile ? 'dd.MM.yyyy' : 'dd MMMM yyyy', { locale: ru })
     : null;
 
@@ -234,26 +300,30 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
   return (
     <div className="space-y-4 md:space-y-6 px-4 sm:px-0">
       {/* Информация о пользователе */}
-      <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-6 border border-gray-800">
-        <h2 className="text-base md:text-lg font-semibold text-white mb-3 md:mb-4">Информация</h2>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="w-14 h-14 md:w-16 md:h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl md:text-2xl font-bold flex-shrink-0">
-            {userData.name?.charAt(0) || userData.email?.charAt(0).toUpperCase() || 'U'}
-          </div>
-          <div className="flex-1 w-full min-w-0 space-y-1">
-            <NicknameEditor 
-              initialName={userData.name || ''} 
-              onNicknameChange={handleNicknameChange}
-            />
-            <p className="text-gray-400 text-sm md:text-base truncate" title={userEmail}>
-              {userEmail}
-            </p>
-            <p className="text-gray-500 text-xs md:text-sm">
-              Дата рождения: <span className="text-gray-300">{formattedBirthDate || '-'}</span>
-            </p>
+      {userDataLoading ? (
+        <UserInfoSkeleton />
+      ) : userData ? (
+        <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-6 border border-gray-800">
+          <h2 className="text-base md:text-lg font-semibold text-white mb-3 md:mb-4">Информация</h2>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="w-14 h-14 md:w-16 md:h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl md:text-2xl font-bold flex-shrink-0">
+              {userData.name?.charAt(0) || userData.email?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <div className="flex-1 w-full min-w-0 space-y-1">
+              <NicknameEditor 
+                initialName={userData.name || ''} 
+                onNicknameChange={handleNicknameChange}
+              />
+              <p className="text-gray-400 text-sm md:text-base truncate" title={userEmail}>
+                {userEmail}
+              </p>
+              <p className="text-gray-500 text-xs md:text-sm">
+                Дата рождения: <span className="text-gray-300">{formattedBirthDate || '-'}</span>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Настройки параметров аккаунта */}
       <Link 
@@ -284,157 +354,187 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
 
         {/* Основные метрики - сетка 2x2 на мобильных, 4 колонки на десктопе */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-          {/* Всего просмотрено */}
-          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
-            <div className="flex items-center gap-2 mb-2">
-              <Eye className="w-4 h-4 text-green-400" />
-              <p className="text-gray-400 text-xs md:text-sm">Просмотрено</p>
-            </div>
-            <p className="text-2xl md:text-3xl font-bold text-white">
-              {stats?.total.watched || 0}
-            </p>
-          </div>
+          {statsLoading ? (
+            <>
+              <StatsCardSkeleton />
+              <StatsCardSkeleton />
+              <StatsCardSkeleton />
+              <StatsCardSkeleton />
+            </>
+          ) : stats ? (
+            <>
+              {/* Всего просмотрено */}
+              <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-7 h-7 bg-green-400/20 rounded-full flex items-center justify-center flex-shrink-0">
+                    <CheckIcon className="w-4 h-4 text-green-400" />
+                  </div>
+                  <p className="text-gray-400 text-xs md:text-sm">Просмотрено</p>
+                </div>
+                <p className="text-2xl md:text-3xl font-bold text-white pl-10">
+                  {stats.total.watched}
+                </p>
+              </div>
 
-          {/* Всего отложено */}
-          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
-            <div className="flex items-center gap-2 mb-2">
-              <Clock className="w-4 h-4 text-blue-400" />
-              <p className="text-gray-400 text-xs md:text-sm">Отложено</p>
-            </div>
-            <p className="text-2xl md:text-3xl font-bold text-white">
-              {stats?.total.wantToWatch || 0}
-            </p>
-          </div>
+              {/* Всего отложено */}
+              <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-7 h-7 bg-blue-400/20 rounded-full flex items-center justify-center flex-shrink-0">
+                    <PlusIcon className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <p className="text-gray-400 text-xs md:text-sm">Отложено</p>
+                </div>
+                <p className="text-2xl md:text-3xl font-bold text-white pl-10">
+                  {stats.total.wantToWatch}
+                </p>
+              </div>
 
-          {/* Всего брошено */}
-          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-4 h-4 text-red-400 text-xs font-bold">×</span>
-              <p className="text-gray-400 text-xs md:text-sm">Брошено</p>
-            </div>
-            <p className="text-2xl md:text-3xl font-bold text-white">
-              {stats?.total.dropped || 0}
-            </p>
-          </div>
+              {/* Всего брошено */}
+              <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-7 h-7 bg-red-400/20 rounded-full flex items-center justify-center flex-shrink-0">
+                    <XIcon className="w-4 h-4 text-red-400" />
+                  </div>
+                  <p className="text-gray-400 text-xs md:text-sm">Брошено</p>
+                </div>
+                <p className="text-2xl md:text-3xl font-bold text-white pl-10">
+                  {stats.total.dropped}
+                </p>
+              </div>
 
-          {/* Всего заблокировано */}
-          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-4 h-4 text-gray-500 text-xs font-bold">⛔</span>
-              <p className="text-gray-400 text-xs md:text-sm">Заблокировано</p>
-            </div>
-            <p className="text-2xl md:text-3xl font-bold text-white">
-              {stats?.total.hidden || 0}
-            </p>
-          </div>
+              {/* Всего заблокировано */}
+              <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-7 h-7 bg-gray-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+                    <BanIcon className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <p className="text-gray-400 text-xs md:text-sm">Заблокировано</p>
+                </div>
+                <p className="text-2xl md:text-3xl font-bold text-white pl-10">
+                  {stats.total.hidden}
+                </p>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {/* Вторая строка: Типы контента и Средняя оценка */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-          {/* Соотношение типов контента */}
-          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
-            <div className="flex items-center gap-2 mb-4">
-              <Monitor className="w-4 h-4 text-purple-400" />
-              <p className="text-gray-400 text-xs md:text-sm">Типы контента</p>
-            </div>
-            <div className="space-y-3">
-              {/* Фильмы */}
-              <div className="flex items-center gap-3">
-                <Film className="w-5 h-5 text-green-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-300 text-sm">Фильмы</span>
-                    <span className="text-white font-medium">{stats?.typeBreakdown.movie || 0}</span>
+          {statsLoading ? (
+            <>
+              <TypeBreakdownSkeleton />
+              <AverageRatingSkeleton />
+            </>
+          ) : stats ? (
+            <>
+              {/* Соотношение типов контента */}
+              <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Monitor className="w-4 h-4 text-purple-400" />
+                  <p className="text-gray-400 text-xs md:text-sm">Типы контента</p>
+                </div>
+                <div className="space-y-3">
+                  {/* Фильмы */}
+                  <div className="flex items-center gap-3">
+                    <Film className="w-5 h-5 text-green-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-300 text-sm">Фильмы</span>
+                        <span className="text-white font-medium">{stats.typeBreakdown.movie}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-500 rounded-full transition-all duration-500"
+                          style={{ 
+                            width: `${stats.total.watched > 0 
+                              ? (stats.typeBreakdown.movie / stats.total.watched) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-green-500 rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${stats && stats.total.watched > 0 
-                          ? (stats.typeBreakdown.movie / stats.total.watched) * 100 
-                          : 0}%` 
-                      }}
-                    />
+                  {/* Сериалы */}
+                  <div className="flex items-center gap-3">
+                    <Tv className="w-5 h-5 text-blue-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-300 text-sm">Сериалы</span>
+                        <span className="text-white font-medium">{stats.typeBreakdown.tv}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                          style={{ 
+                            width: `${stats.total.watched > 0 
+                              ? (stats.typeBreakdown.tv / stats.total.watched) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {/* Аниме */}
+                  <div className="flex items-center gap-3">
+                    <span className="w-5 h-5 text-purple-400 text-sm font-bold">あ</span>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-300 text-sm">Аниме</span>
+                        <span className="text-white font-medium">{stats.typeBreakdown.anime}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-purple-500 rounded-full transition-all duration-500"
+                          style={{ 
+                            width: `${stats.total.watched > 0 
+                              ? (stats.typeBreakdown.anime / stats.total.watched) * 100 
+                              : 0}%` 
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              {/* Сериалы */}
-              <div className="flex items-center gap-3">
-                <Tv className="w-5 h-5 text-blue-400 flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-300 text-sm">Сериалы</span>
-                    <span className="text-white font-medium">{stats?.typeBreakdown.tv || 0}</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${stats && stats.total.watched > 0 
-                          ? (stats.typeBreakdown.tv / stats.total.watched) * 100 
-                          : 0}%` 
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-              {/* Аниме */}
-              <div className="flex items-center gap-3">
-                <span className="w-5 h-5 text-purple-400 text-sm font-bold">あ</span>
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-300 text-sm">Аниме</span>
-                    <span className="text-white font-medium">{stats?.typeBreakdown.anime || 0}</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-purple-500 rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${stats && stats.total.watched > 0 
-                          ? (stats.typeBreakdown.anime / stats.total.watched) * 100 
-                          : 0}%` 
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          {/* Средняя оценка */}
-          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
-            <div className="flex items-center gap-2 mb-4">
-              <Star className="w-4 h-4 text-yellow-400" />
-              <p className="text-gray-400 text-xs md:text-sm">Средняя оценка</p>
-            </div>
-            <div className="flex items-end gap-3">
-              <span className="text-4xl md:text-5xl font-bold text-white">
-                {stats?.averageRating?.toFixed(1) || '-'}
-              </span>
-              <div className="flex-1 pb-1">
-                <div className="flex gap-0.5 mb-1">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
-                    <Star 
-                      key={star}
-                      className={`w-4 h-4 ${
-                        (stats?.averageRating || 0) >= star 
-                          ? 'text-yellow-400 fill-yellow-400' 
-                          : 'text-gray-600'
-                      }`}
-                    />
-                  ))}
+              {/* Средняя оценка */}
+              <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Star className="w-4 h-4 text-yellow-400" />
+                  <p className="text-gray-400 text-xs md:text-sm">Средняя оценка</p>
                 </div>
-                <p className="text-gray-500 text-xs">
-                  {stats?.ratedCount || 0} оценённых
-                </p>
+                <div className="flex items-end gap-3">
+                  <span className="text-4xl md:text-5xl font-bold text-white">
+                    {stats.averageRating?.toFixed(1) || '-'}
+                  </span>
+                  <div className="flex-1 pb-1">
+                    <div className="flex gap-0.5 mb-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
+                        <Star 
+                          key={star}
+                          className={`w-4 h-4 ${
+                            (stats.averageRating || 0) >= star 
+                              ? 'text-yellow-400 fill-yellow-400' 
+                              : 'text-gray-600'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-gray-500 text-xs">
+                      {stats.ratedCount} оценённых
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          ) : null}
         </div>
       </div>
 
       {/* Кинофраншизы */}
-      {collections.length > 0 && (
+      {collectionsLoading ? (
+        <HorizontalListSkeleton />
+      ) : collections.length > 0 ? (
         <div className="space-y-4">
           {/* Заголовок секции */}
           <div className="flex items-center gap-2">
@@ -461,14 +561,19 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                       {/* Постер */}
                       <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 border border-gray-700 group-hover:border-purple-500/50 transition-all relative">
                         {collection.poster_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w300${collection.poster_path}`}
-                            alt={collection.name}
-                            className="w-full h-full object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
-                            style={{ 
-                              filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
-                            }}
-                          />
+                          <div className="w-full h-full relative">
+                            <Image
+                              src={`https://image.tmdb.org/t/p/w300${collection.poster_path}`}
+                              alt={collection.name}
+                              fill
+                              className="object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
+                              sizes="(max-width: 640px) 112px, (max-width: 768px) 144px, 144px"
+                              quality={85}
+                              style={{ 
+                                filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
+                              }}
+                            />
+                          </div>
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-600">
                             <Film className="w-8 h-8" />
@@ -511,10 +616,12 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
-      )}
+      ) : null}
 
       {/* Любимые актеры */}
-      {actors.length > 0 && (
+      {actorsLoading ? (
+        <HorizontalListSkeleton />
+      ) : actors.length > 0 ? (
         <div className="space-y-4">
           {/* Заголовок секции */}
           <div className="flex items-center gap-2">
@@ -543,14 +650,19 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                       {/* Постер актера */}
                       <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 border border-gray-700 group-hover:border-amber-500/50 transition-all relative">
                         {actor.profile_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
-                            alt={actor.name}
-                            className="w-full h-full object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
-                            style={{ 
-                              filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
-                            }}
-                          />
+                          <div className="w-full h-full relative">
+                            <Image
+                              src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
+                              alt={actor.name}
+                              fill
+                              className="object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
+                              sizes="(max-width: 640px) 112px, (max-width: 768px) 144px, 144px"
+                              quality={85}
+                              style={{ 
+                                filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
+                              }}
+                            />
+                          </div>
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-600">
                             <Users className="w-8 h-8" />
@@ -593,7 +705,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
-      )}
+      ) : null}
 
       {/* Приглашение друзей */}
       <Link 

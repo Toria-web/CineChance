@@ -29,7 +29,8 @@ export async function GET(
     }
 
     const res = await fetch(
-      `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=ru-RU`
+      `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=ru-RU`,
+      { next: { revalidate: 86400 } }
     );
 
     if (!res.ok) {

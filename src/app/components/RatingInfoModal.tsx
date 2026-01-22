@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const RatingModal = dynamic(() => import('./RatingModal'), { ssr: false });
@@ -916,11 +917,15 @@ export default function RatingInfoModal({
                         >
                           {/* Фото актера */}
                           {actor.profilePath ? (
-                            <img
-                              src={`https://image.tmdb.org/t/p/w92${actor.profilePath}`}
-                              alt={actor.name}
-                              className="w-6 h-8 object-cover rounded flex-shrink-0"
-                            />
+                            <div className="w-6 h-8 relative flex-shrink-0">
+                              <Image
+                                src={`https://image.tmdb.org/t/p/w92${actor.profilePath}`}
+                                alt={actor.name}
+                                fill
+                                className="object-cover rounded"
+                                sizes="24px"
+                              />
+                            </div>
                           ) : (
                             <div className="w-6 h-8 bg-gray-700 rounded flex items-center justify-center flex-shrink-0">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">

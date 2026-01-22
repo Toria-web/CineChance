@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 const AuthModal = dynamic(() => import('./AuthModal'), { ssr: false });
-import Loader from './Loader';
 import { logger } from '@/lib/logger';
 import { CloseIcon } from './Icons';
 
@@ -21,7 +20,11 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
 
   const router = useRouter();
 
-  const isLoading = status === "loading";
+  // ID администратора для доступа к панели управления
+  const ADMIN_USER_ID = 'cmkbc7sn2000104k3xd3zyf2a';
+  const isAdmin = session?.user?.id === ADMIN_USER_ID;
+  const isAuthenticated = status === 'authenticated';
+  const isAuthLoading = status === 'loading';
 
   const handleLogin = () => {
     setShowAuthModal(true);
@@ -29,7 +32,6 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
 
   const handleLogout = async () => {
     try {
-      // Use client-side redirect for stability
       await signOut({ redirect: false });
       router.push('/');
     } catch (err) {
@@ -39,10 +41,6 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
       if (typeof window !== 'undefined' && window.innerWidth < 1024) toggle();
     }
   };
-
-  // ID администратора для доступа к панели управления
-  const ADMIN_USER_ID = 'cmkbc7sn2000104k3xd3zyf2a';
-  const isAdmin = session?.user?.id === ADMIN_USER_ID;
 
   // Базовые пункты меню для всех пользователей
   const baseMenuItems: Array<[string, string, boolean?]> = [
@@ -56,12 +54,12 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
   ];
 
   // Пункт меню админ-панели только для администратора
-  const adminMenuItems: Array<[string, string, boolean]> = isAdmin 
-    ? [['/admin', 'Управление', true]] 
+  const adminMenuItems: Array<[string, string, boolean]> = isAdmin
+    ? [['/admin', 'Управление', true]]
     : [];
 
   // Объединяем меню в зависимости от статуса авторизации
-  const menuItems = session?.user 
+  const menuItems = isAuthenticated
     ? [...baseMenuItems, ...authMenuItems, ...adminMenuItems]
     : baseMenuItems;
 
@@ -90,11 +88,14 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
 
         {/* Пользователь */}
         <div className="p-6 border-b border-gray-800">
-          {isLoading ? (
-            <div className="text-center">
-              <Loader size="small" />
+          {isAuthLoading ? (
+            <div className="flex flex-col items-center">
+              {/* Skeleton для аватара */}
+              <div className="w-14 h-14 bg-gray-800 rounded-full animate-pulse mb-2" />
+              {/* Skeleton для имени */}
+              <div className="h-4 w-24 bg-gray-800 rounded animate-pulse" />
             </div>
-          ) : session?.user ? (
+          ) : isAuthenticated ? (
             <div className="flex flex-col items-center">
               <Link
                 href="/profile"
@@ -134,7 +135,7 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
               const href = item[0];
               const label = item[1];
               const isAdminItem = item[2] === true;
-              
+
               return (
                 <li key={href}>
                   <Link
@@ -161,15 +162,16 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
 
         {/* Аутентификация */}
         <div className="p-6 border-t border-gray-800">
-          {isLoading ? (
-            <div className="h-10 flex items-center justify-center">
-              <Loader size="small" />
+          {isAuthLoading ? (
+            <div className="space-y-3">
+              {/* Skeleton для кнопки */}
+              <div className="h-10 bg-gray-800 rounded-lg animate-pulse" />
             </div>
-          ) : session?.user ? (
+          ) : isAuthenticated ? (
             <>
               <button
                 onClick={handleLogout}
-                className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-lg font-medium hover:brightness-110 transition mb-3"
+                className="w-full py-3 px-4 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-lg font-medium hover:brightness-110 transition"
               >
                 Выйти
               </button>
@@ -182,7 +184,6 @@ export default function Sidebar({ isOpen, toggle }: SidebarProps) {
               >
                 Войти
               </button>
-
             </>
           )}
         </div>

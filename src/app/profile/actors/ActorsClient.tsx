@@ -2,9 +2,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { User } from 'lucide-react';
-import Loader from '@/app/components/Loader';
 import '@/app/profile/components/AchievementCards.css';
 
 interface ActorAchievement {
@@ -23,6 +23,29 @@ interface ActorsClientProps {
 
 const ITEMS_PER_PAGE = 12;
 const INITIAL_ITEMS = 24;
+
+// Skeleton для карточки актера
+function ActorCardSkeleton() {
+  return (
+    <div className="animate-pulse">
+      <div className="aspect-[2/3] rounded-lg bg-gray-800 border border-gray-700" />
+      <div className="mt-2 h-4 bg-gray-800 rounded w-3/4" />
+      <div className="mt-1 h-3 bg-gray-900 rounded w-1/2" />
+    </div>
+  );
+}
+
+// Skeleton для всей страницы
+function PageSkeleton() {
+  const skeletonCount = 12;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      {Array.from({ length: skeletonCount }).map((_, i) => (
+        <ActorCardSkeleton key={i} />
+      ))}
+    </div>
+  );
+}
 
 export default function ActorsClient({ userId }: ActorsClientProps) {
   const [allActors, setAllActors] = useState<ActorAchievement[]>([]);
@@ -64,12 +87,15 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
 
   const visibleActors = allActors.slice(0, visibleCount);
   const hasMore = visibleCount < allActors.length;
-  const isLoadingMore = false; // For loading state during pagination
+  const isLoadingMore = false;
 
   if (loading) {
     return (
-      <div className="bg-gray-900 rounded-lg md:rounded-xl p-6 border border-gray-800">
-        <Loader text="Загрузка актеров..." />
+      <div className="space-y-4">
+        {/* Skeleton заголовка */}
+        <div className="h-6 w-48 bg-gray-800 rounded animate-pulse" />
+        {/* Skeleton сетки */}
+        <PageSkeleton />
       </div>
     );
   }
@@ -97,9 +123,7 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
       {/* Сетка актеров */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
         {visibleActors.map((actor) => {
-          // Используем progress_percent из API
           const progressPercent = actor.progress_percent || 0;
-          // Рассчитываем grayscale и saturate на основе прогресса
           const grayscaleValue = 100 - progressPercent;
           const saturateValue = progressPercent;
           
@@ -110,24 +134,27 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
               className="group relative"
             >
               <div className="relative">
-                {/* Фото актера */}
                 <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 border border-gray-700 group-hover:border-amber-500/50 transition-all relative">
                   {actor.profile_path ? (
-                    <img
-                      src={`https://image.tmdb.org/t/p/w300${actor.profile_path}`}
-                      alt={actor.name}
-                      className="w-full h-full object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
-                      style={{ 
-                        filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
-                      }}
-                    />
+                    <div className="w-full h-full relative">
+                      <Image
+                        src={`https://image.tmdb.org/t/p/w300${actor.profile_path}`}
+                        alt={actor.name}
+                        fill
+                        className="object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
+                        sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+                        quality={85}
+                        style={{ 
+                          filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
+                        }}
+                      />
+                    </div>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-600">
                       <User className="w-10 h-10" />
                     </div>
                   )}
                   
-                  {/* Прогресс просмотра */}
                   <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-800">
                     <div 
                       className="h-full bg-amber-500 transition-all"
@@ -135,18 +162,15 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
                     />
                   </div>
                   
-                  {/* Количество фильмов */}
                   <div className="absolute top-2 right-2 bg-amber-600/90 text-white text-xs font-medium px-2 py-1 rounded">
                     {actor.progress_percent}%
                   </div>
                 </div>
                 
-                {/* Имя актера */}
                 <h3 className="mt-2 text-gray-300 text-sm truncate group-hover:text-amber-400 transition-colors">
                   {actor.name}
                 </h3>
                 
-                {/* Статистика */}
                 <p className="text-gray-500 text-xs">
                   <span className="text-green-400">{actor.watched_movies}</span>
                   {' / '}
@@ -159,7 +183,6 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
         })}
       </div>
 
-      {/* Кнопка "Ещё" */}
       {hasMore && (
         <div className="flex justify-center mt-6">
           <button
@@ -179,12 +202,10 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
         </div>
       )}
 
-      {/* Итого */}
       <p className="text-gray-500 text-sm text-center pt-4">
         Показано {visibleActors.length} из {allActors.length} актеров
       </p>
 
-      {/* Кнопка "Наверх" */}
       {showScrollTop && (
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
