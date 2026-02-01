@@ -9,6 +9,7 @@ import RatingInfoModal from './RatingInfoModal';
 import { calculateCineChanceScore } from '@/lib/calculateCineChanceScore';
 import MoviePoster from './MoviePoster';
 import MoviePosterFallback from './MoviePosterFallback';
+import MoviePosterProxy from './MoviePosterProxy';
 import StatusOverlay from './StatusOverlay';
 import { logger } from '@/lib/logger';
 import { useBlacklist } from './BlacklistContext';
@@ -19,10 +20,14 @@ const isMobileDevice = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 };
 
-// Используем fallback на мобильных или если включен флаг
-const useFallbackPoster = () => {
-  // Можно включить через environment переменную или всегда на мобильных
-  return isMobileDevice() || process.env.NEXT_PUBLIC_USE_FALLBACK_POSTER === 'true';
+// Используем разные стратегии для разных устройств
+const getPosterStrategy = () => {
+  const useFallback = isMobileDevice() || process.env.NEXT_PUBLIC_USE_FALLBACK_POSTER === 'true';
+  const useProxy = process.env.NEXT_PUBLIC_USE_IMAGE_PROXY === 'true';
+  
+  if (useProxy) return 'proxy';
+  if (useFallback) return 'fallback';
+  return 'default';
 };
 
 const RATING_TEXTS: Record<number, string> = {
@@ -582,33 +587,56 @@ export default function MovieCard({
             
             {getStatusIcon()}
 
-            {useFallbackPoster() ? (
-              <MoviePosterFallback
-                key={movie.id}
-                movie={movie}
-                priority={priority}
-                isBlacklisted={isBlacklisted}
-                restoreView={restoreView}
-                isHovered={isHovered && !showOverlay}
-                showOverlay={showOverlay}
-                onClick={handlePosterClick}
-                onMouseEnter={handlePosterMouseEnter}
-                onMouseLeave={handlePosterMouseLeave}
-              />
-            ) : (
-              <MoviePoster
-                key={movie.id}
-                movie={movie}
-                priority={priority}
-                isBlacklisted={isBlacklisted}
-                restoreView={restoreView}
-                isHovered={isHovered && !showOverlay}
-                showOverlay={showOverlay}
-                onClick={handlePosterClick}
-                onMouseEnter={handlePosterMouseEnter}
-                onMouseLeave={handlePosterMouseLeave}
-              />
-            )}
+            {(() => {
+              const strategy = getPosterStrategy();
+              switch (strategy) {
+                case 'proxy':
+                  return (
+                    <MoviePosterProxy
+                      key={movie.id}
+                      movie={movie}
+                      priority={priority}
+                      isBlacklisted={isBlacklisted}
+                      restoreView={restoreView}
+                      isHovered={isHovered && !showOverlay}
+                      showOverlay={showOverlay}
+                      onClick={handlePosterClick}
+                      onMouseEnter={handlePosterMouseEnter}
+                      onMouseLeave={handlePosterMouseLeave}
+                    />
+                  );
+                case 'fallback':
+                  return (
+                    <MoviePosterFallback
+                      key={movie.id}
+                      movie={movie}
+                      priority={priority}
+                      isBlacklisted={isBlacklisted}
+                      restoreView={restoreView}
+                      isHovered={isHovered && !showOverlay}
+                      showOverlay={showOverlay}
+                      onClick={handlePosterClick}
+                      onMouseEnter={handlePosterMouseEnter}
+                      onMouseLeave={handlePosterMouseLeave}
+                    />
+                  );
+                default:
+                  return (
+                    <MoviePoster
+                      key={movie.id}
+                      movie={movie}
+                      priority={priority}
+                      isBlacklisted={isBlacklisted}
+                      restoreView={restoreView}
+                      isHovered={isHovered && !showOverlay}
+                      showOverlay={showOverlay}
+                      onClick={handlePosterClick}
+                      onMouseEnter={handlePosterMouseEnter}
+                      onMouseLeave={handlePosterMouseLeave}
+                    />
+                  );
+              }
+            })()}
           </div>
 
           {showOverlay && (

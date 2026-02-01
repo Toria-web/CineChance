@@ -19,6 +19,13 @@ const nextConfig: NextConfig = {
         pathname: "/**",
       },
     ],
+    // Отключаем оптимизацию для внешних изображений на мобильных
+    unoptimized: true,
+    // Увеличиваем timeout для медленных соединений
+    minimumCacheTTL: 60,
+    // Отключаем device sizes для мобильных
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
 
   experimental: {
