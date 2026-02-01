@@ -8,9 +8,22 @@ import RatingModal from './RatingModal';
 import RatingInfoModal from './RatingInfoModal';
 import { calculateCineChanceScore } from '@/lib/calculateCineChanceScore';
 import MoviePoster from './MoviePoster';
+import MoviePosterFallback from './MoviePosterFallback';
 import StatusOverlay from './StatusOverlay';
 import { logger } from '@/lib/logger';
 import { useBlacklist } from './BlacklistContext';
+
+// Детекция мобильного устройства
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+// Используем fallback на мобильных или если включен флаг
+const useFallbackPoster = () => {
+  // Можно включить через environment переменную или всегда на мобильных
+  return isMobileDevice() || process.env.NEXT_PUBLIC_USE_FALLBACK_POSTER === 'true';
+};
 
 const RATING_TEXTS: Record<number, string> = {
   1: 'Хуже некуда',
@@ -569,18 +582,33 @@ export default function MovieCard({
             
             {getStatusIcon()}
 
-            <MoviePoster
-              key={movie.id}
-              movie={movie}
-              priority={priority}
-              isBlacklisted={isBlacklisted}
-              restoreView={restoreView}
-              isHovered={isHovered && !showOverlay}
-              showOverlay={showOverlay}
-              onClick={handlePosterClick}
-              onMouseEnter={handlePosterMouseEnter}
-              onMouseLeave={handlePosterMouseLeave}
-            />
+            {useFallbackPoster() ? (
+              <MoviePosterFallback
+                key={movie.id}
+                movie={movie}
+                priority={priority}
+                isBlacklisted={isBlacklisted}
+                restoreView={restoreView}
+                isHovered={isHovered && !showOverlay}
+                showOverlay={showOverlay}
+                onClick={handlePosterClick}
+                onMouseEnter={handlePosterMouseEnter}
+                onMouseLeave={handlePosterMouseLeave}
+              />
+            ) : (
+              <MoviePoster
+                key={movie.id}
+                movie={movie}
+                priority={priority}
+                isBlacklisted={isBlacklisted}
+                restoreView={restoreView}
+                isHovered={isHovered && !showOverlay}
+                showOverlay={showOverlay}
+                onClick={handlePosterClick}
+                onMouseEnter={handlePosterMouseEnter}
+                onMouseLeave={handlePosterMouseLeave}
+              />
+            )}
           </div>
 
           {showOverlay && (
