@@ -7,6 +7,7 @@ import { getCachedMediaDetails, setCachedMediaDetails } from '@/lib/tmdbCache';
 import { logger } from '@/lib/logger';
 import { rateLimit } from '@/middleware/rateLimit';
 import { calculateCineChanceScore } from '@/lib/calculateCineChanceScore';
+import { shouldFilterAdult } from '@/lib/ageFilter';
 import {
   FiltersSnapshot,
   CandidatePoolMetrics,
