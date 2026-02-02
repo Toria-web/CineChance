@@ -34,6 +34,14 @@ interface FilterParams {
   tags?: string[];
 }
 
+interface AdditionalFilters {
+  minRating: number;
+  yearFrom: string;
+  yearTo: string;
+  selectedGenres: number[];
+  selectedTags: string[];
+}
+
 /**
  * Парсинг параметров фильтрации из URL
  */
