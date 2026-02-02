@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { MOVIE_STATUS_IDS, getStatusIdByName } from '@/lib/movieStatusConstants';
+import { MOVIE_STATUS_IDS, getStatusIdByName, getStatusNameById } from '@/lib/movieStatusConstants';
 import { calculateCineChanceScore } from '@/lib/calculateCineChanceScore';
 
 const ITEMS_PER_PAGE = 20;
@@ -214,7 +214,7 @@ export async function GET(request: NextRequest) {
         voteAverage: true,
         userRating: true,
         addedAt: true,
-        status: { select: { name: true } },
+        statusId: true,
         tags: { select: { id: true, name: true } },
       },
       orderBy: { addedAt: 'desc' },
@@ -310,7 +310,7 @@ export async function GET(request: NextRequest) {
         overview: tmdbData?.overview || '',
         genre_ids: tmdbData?.genres?.map((g: any) => g.id) || [],
         original_language: tmdbData?.original_language || '',
-        statusName: record.status.name,
+        statusName: getStatusNameById(record.statusId) || 'Unknown',
         combinedRating,
         averageRating: cineChanceRating,
         ratingCount: cineChanceVotes,

@@ -8,7 +8,7 @@ import { logger } from '@/lib/logger';
 import { rateLimit } from '@/middleware/rateLimit';
 import { calculateCineChanceScore } from '@/lib/calculateCineChanceScore';
 import { shouldFilterAdult } from '@/lib/ageFilter';
-import { getRecommendationStatusIds } from '@/lib/movieStatusConstants';
+import { getRecommendationStatusIds, getStatusNameById } from '@/lib/movieStatusConstants';
 import {
   FiltersSnapshot,
   CandidatePoolMetrics,
@@ -630,7 +630,8 @@ export async function GET(req: Request) {
       'Пересмотрено': 'rewatched',
       'Брошено': 'dropped',
     };
-    const userStatus = userStatusMap[selected.status.name] || null;
+    const statusName = getStatusNameById(selected.statusId);
+    const userStatus = statusName ? userStatusMap[statusName] || null : null;
 
     // 9. Формируем контекстные данные для записи
     const filtersSnapshot = createFiltersSnapshot(types, lists, minRating, yearFrom, yearTo, genres, tags);
