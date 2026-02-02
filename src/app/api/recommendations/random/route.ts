@@ -213,6 +213,8 @@ function createFiltersSnapshot(
  * Пример: /api/recommendations/random?types=movie,anime&lists=want,watched,dropped&genres=28,12&tags=action,comedy
  */
 export async function GET(req: Request) {
+  const startTime = Date.now();
+  
   // Apply rate limiting
   const { success } = await rateLimit(req, '/api/recommendations');
   if (!success) {
@@ -725,6 +727,16 @@ export async function GET(req: Request) {
       userRating: watchListData?.userRating || null,
       watchCount: watchListData?.watchCount || 0,
       message: 'Рекомендация получена',
+      // Debug информация для разработки
+      ...(process.env.NODE_ENV === 'development' && {
+        debug: {
+          tmdbCalls: watchListItems.length,
+          dbRecords: watchListItems.length,
+          cached: false, // TODO: Добавить реальную проверку кэша
+          fetchDuration: Date.now() - startTime,
+          filters: { types, lists, minRating, yearFrom, yearTo, genres, tags: tags || [] }
+        }
+      })
     });
   } catch (error) {
     logger.error('Recommendations API error', { 
