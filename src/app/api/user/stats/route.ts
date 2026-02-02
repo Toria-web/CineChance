@@ -60,6 +60,10 @@ export async function GET(request: NextRequest) {
     const userId = session.user.id;
 
     // Получаем общую статистику
+    console.log('\n=== ПОДСЧЕТ СТАТИСТИКИ В /api/user/stats ===');
+    console.log('User ID:', userId);
+    console.log('MOVIE_STATUS_IDS:', MOVIE_STATUS_IDS);
+    
     const [watchedCount, wantToWatchCount, droppedCount, hiddenCount] = await Promise.all([
       // Просмотрено + Пересмотрено
       prisma.watchList.count({
@@ -79,6 +83,12 @@ export async function GET(request: NextRequest) {
       // Скрыто (blacklist)
       prisma.blacklist.count({ where: { userId } }),
     ]);
+
+    console.log('Результаты подсчета в /api/user/stats:');
+    console.log(`WATCHED + REWATCHED: ${watchedCount}`);
+    console.log(`WANT_TO_WATCH: ${wantToWatchCount}`);
+    console.log(`DROPPED: ${droppedCount}`);
+    console.log(`HIDDEN (blacklist): ${hiddenCount}`);
 
     // Получаем соотношение по типам контента (по всем статусам кроме скрытых)
     // Получаем все записи кроме скрытых (blacklist)

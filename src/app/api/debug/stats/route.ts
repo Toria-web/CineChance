@@ -88,12 +88,21 @@ export async function GET(request: NextRequest) {
     };
 
     // Считаем количество записей по каждому статусу
+    console.log('\n=== ПОДСЧЕТ ЗАПИСЕЙ ПО СТАТУСАМ ===');
+    
     const counts = await Promise.all([
       prisma.watchList.count({ where: { userId, statusId: MOVIE_STATUS_IDS.WANT_TO_WATCH } }),
       prisma.watchList.count({ where: { userId, statusId: MOVIE_STATUS_IDS.WATCHED } }),
       prisma.watchList.count({ where: { userId, statusId: MOVIE_STATUS_IDS.REWATCHED } }),
       prisma.watchList.count({ where: { userId, statusId: MOVIE_STATUS_IDS.DROPPED } }),
     ]);
+
+    console.log('Результаты подсчета:');
+    console.log(`WANT_TO_WATCH (${MOVIE_STATUS_IDS.WANT_TO_WATCH}): ${counts[0]}`);
+    console.log(`WATCHED (${MOVIE_STATUS_IDS.WATCHED}): ${counts[1]}`);
+    console.log(`REWATCHED (${MOVIE_STATUS_IDS.REWATCHED}): ${counts[2]}`);
+    console.log(`DROPPED (${MOVIE_STATUS_IDS.DROPPED}): ${counts[3]}`);
+    console.log(`WATCHED + REWATCHED: ${counts[1] + counts[2]}`);
 
     debugInfo.databaseCounts = {
       wantToWatch: counts[0],
@@ -178,7 +187,7 @@ export async function GET(request: NextRequest) {
           genres: tmdbData.genres?.map((g: any) => ({ id: g.id, name: g.name })) || [],
           hasAnimationGenre: tmdbData.genres?.some((g: any) => g.id === 16) ?? false,
           isJapanese: tmdbData.original_language === 'ja',
-          finalType: null as string,
+          finalType: null as any,
         };
 
         if (isAnime(tmdbData)) {
