@@ -52,26 +52,80 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
   const [allActors, setAllActors] = useState<ActorAchievement[]>([]);
   const [visibleCount, setVisibleCount] = useState(INITIAL_ITEMS);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
 
-  useEffect(() => {
-    const fetchActors = async () => {
-      try {
-        const res = await fetch('/api/user/achiev_actors');
-        if (!res.ok) throw new Error('Failed to fetch actors');
-        const data = await res.json();
-        setAllActors(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error('Failed to fetch actors:', err);
-        setError('Не удалось загрузить актеров');
-      } finally {
-        setLoading(false);
+  // Функция загрузки актеров с пагинацией
+  const fetchActors = async (offsetValue = 0, append = false) => {
+    try {
+      const params = new URLSearchParams({
+        limit: '24',
+        offset: offsetValue.toString(),
+        fullData: 'false', // Сначала загружаем базовые данные
+      });
+      
+      const res = await fetch(`/api/user/achiev_actors?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch actors');
+      const data = await res.json();
+      
+      if (data.actors && Array.isArray(data.actors)) {
+        setAllActors(prev => append ? [...prev, ...data.actors] : data.actors);
+        setHasMore(data.hasMore || false);
+        setTotal(data.total || 0);
+        setOffset(offsetValue + (append ? data.actors.length : 0));
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch actors:', err);
+      setError('Не удалось загрузить актеров');
+    }
+  };
 
-    fetchActors();
+  // Функция дозагрузки полной фильмографии для видимых актеров
+  const loadFullDataForVisibleActors = async () => {
+    const visibleActors = allActors.slice(0, visibleCount);
+    const actorsNeedingFullData = visibleActors.filter(actor => actor.total_movies === 0);
+    
+    if (actorsNeedingFullData.length === 0) return;
+    
+    try {
+      const params = new URLSearchParams({
+        limit: actorsNeedingFullData.length.toString(),
+        offset: '0',
+        fullData: 'true',
+      });
+      
+      const res = await fetch(`/api/user/achiev_actors?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch full data');
+      const data = await res.json();
+      
+      if (data.actors && Array.isArray(data.actors)) {
+        // Обновляем данные для актеров
+        setAllActors(prev => prev.map(actor => {
+          const fullDataActor = data.actors.find((full: any) => full.id === actor.id);
+          return fullDataActor || actor;
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to load full data:', err);
+    }
+  };
+
+  // Первоначальная загрузка
+  useEffect(() => {
+    setLoading(true);
+    fetchActors().finally(() => setLoading(false));
   }, [userId]);
+
+  // Загрузка полной фильмографии для видимых актеров
+  useEffect(() => {
+    if (allActors.length > 0 && !loading) {
+      loadFullDataForVisibleActors();
+    }
+  }, [visibleCount, allActors.length, loading]);
 
   // Scroll to top button
   useEffect(() => {
@@ -82,13 +136,16 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const loadMore = () => {
-    setVisibleCount(prev => prev + ITEMS_PER_PAGE);
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    setLoadingMore(true);
+    await fetchActors(offset, true);
+    setLoadingMore(false);
   };
 
   const visibleActors = allActors.slice(0, visibleCount);
-  const hasMore = visibleCount < allActors.length;
-  const isLoadingMore = false;
+  const hasMoreVisible = visibleCount < allActors.length;
 
   if (loading) {
     return (
@@ -227,10 +284,10 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
         <div className="flex justify-center mt-6">
           <button
             onClick={loadMore}
-            disabled={isLoadingMore}
+            disabled={loadingMore}
             className="px-6 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
-            {isLoadingMore ? (
+            {loadingMore ? (
               <>
                 <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"></div>
                 Загрузка...
@@ -243,7 +300,7 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
       )}
 
       <p className="text-gray-500 text-sm text-center pt-4">
-        Показано {visibleActors.length} из {allActors.length} актеров
+        Показано {visibleActors.length} из {total} актеров
       </p>
 
       {showScrollTop && (

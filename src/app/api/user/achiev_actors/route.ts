@@ -7,6 +7,10 @@ import { MOVIE_STATUS_IDS } from '@/lib/movieStatusConstants';
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
 
+// Простое кэширование в памяти для фильмографии актеров
+const actorCreditsCache = new Map<number, { data: any; timestamp: number }>();
+const CACHE_DURATION = 86400000; // 24 часа в миллисекундах
+
 // Вспомогательная функция для получения деталей с TMDB
 async function fetchMediaDetails(tmdbId: number, mediaType: 'movie' | 'tv') {
   const apiKey = process.env.TMDB_API_KEY;
@@ -92,8 +96,16 @@ async function fetchMovieCredits(tmdbId: number, mediaType: 'movie' | 'tv'): Pro
   }
 }
 
-// Получение полной фильмографии актёра
+// Получение полной фильмографии актёра с кэшированием
 async function fetchPersonCredits(actorId: number): Promise<TMDBPersonCredits | null> {
+  // Проверяем кэш
+  const cached = actorCreditsCache.get(actorId);
+  const now = Date.now();
+  
+  if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+    return cached.data;
+  }
+
   try {
     const url = new URL(`${BASE_URL}/person/${actorId}/combined_credits`);
     url.searchParams.append('api_key', TMDB_API_KEY || '');
@@ -108,7 +120,12 @@ async function fetchPersonCredits(actorId: number): Promise<TMDBPersonCredits | 
       return null;
     }
 
-    return await response.json();
+    const data = await response.json();
+    
+    // Сохраняем в кэш
+    actorCreditsCache.set(actorId, { data, timestamp: now });
+    
+    return data;
   } catch (error) {
     return null;
   }
@@ -128,6 +145,11 @@ export async function GET(request: Request) {
     const userId = session.user.id;
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get('userId') || userId;
+    
+    // Параметры пагинации
+    const limit = Math.min(parseInt(searchParams.get('limit') || '24'), 50); // Максимум 50
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
+    const loadFullData = searchParams.get('fullData') === 'true'; // Загружать ли полную фильмографию
 
     // Получаем все фильмы и сериалы пользователя со статусом "Просмотрено"
     const watchedMoviesData = await prisma.watchList.findMany({
@@ -204,62 +226,80 @@ export async function GET(request: Request) {
       }
     }
 
-    // Берем топ-50 актеров
-    const topActors = Array.from(actorMap.entries())
-      .sort((a, b) => b[1].watchedIds.size - a[1].watchedIds.size)
-      .slice(0, 50);
-
-    // Параллельная загрузка фильмографии для всех топ-актеров
-    const achievementsPromises = topActors.map(async ([actorId, actorData]) => {
-      const credits = await fetchPersonCredits(actorId);
-      
-      const totalMovies = credits?.cast?.length || 0;
-      const watchedMovies = actorData.watchedIds.size;
-      
-      const progressPercent = totalMovies > 0 
-        ? Math.round((watchedMovies / totalMovies) * 100)
-        : 0;
-
-      const averageRating = actorData.ratings.length > 0
+    // Берем всех актеров для сортировки, но ограничиваем пагинацией
+    const allActors = Array.from(actorMap.entries())
+      .sort((a, b) => b[1].watchedIds.size - a[1].watchedIds.size);
+    
+    // Применяем пагинацию
+    const paginatedActors = allActors.slice(offset, offset + limit);
+    
+    // Подготавливаем базовые данные без фильмографии
+    const baseActorsData = paginatedActors.map(([actorId, actorData]) => ({
+      id: actorId,
+      name: actorData.name,
+      profile_path: actorData.profile_path,
+      watched_movies: actorData.watchedIds.size,
+      total_movies: 0, // Будет загружено позже
+      progress_percent: 0, // Будет пересчитано позже
+      average_rating: actorData.ratings.length > 0
         ? Number((actorData.ratings.reduce((a, b) => a + b, 0) / actorData.ratings.length).toFixed(1))
-        : null;
+        : null,
+    }));
 
-      return {
-        id: actorId,
-        name: actorData.name,
-        profile_path: actorData.profile_path,
-        watched_movies: watchedMovies,
-        total_movies: totalMovies,
-        progress_percent: progressPercent,
-        average_rating: averageRating,
-      };
-    });
+    // Если нужна полная фильмография - загружаем ее
+    if (loadFullData) {
+      const achievementsPromises = baseActorsData.map(async (actor) => {
+        const credits = await fetchPersonCredits(actor.id);
+        
+        const totalMovies = credits?.cast?.length || 0;
+        const watchedMovies = actor.watched_movies;
+        
+        const progressPercent = totalMovies > 0 
+          ? Math.round((watchedMovies / totalMovies) * 100)
+          : 0;
 
-    // Ждем завершения всех запросов параллельно
-    const achievements = await Promise.all(achievementsPromises);
+        return {
+          ...actor,
+          total_movies: totalMovies,
+          progress_percent: progressPercent,
+        };
+      });
 
-    // Сортировка результатов
-    const result = achievements
-      .sort((a, b) => {
-        if (a.average_rating !== null && b.average_rating !== null) {
-          if (b.average_rating !== a.average_rating) {
-            return b.average_rating - a.average_rating;
+      const achievements = await Promise.all(achievementsPromises);
+
+      // Сортировка результатов
+      const result = achievements
+        .sort((a, b) => {
+          if (a.average_rating !== null && b.average_rating !== null) {
+            if (b.average_rating !== a.average_rating) {
+              return b.average_rating - a.average_rating;
+            }
+          } else if (a.average_rating === null && b.average_rating !== null) {
+            return 1;
+          } else if (a.average_rating !== null && b.average_rating === null) {
+            return -1;
           }
-        } else if (a.average_rating === null && b.average_rating !== null) {
-          return 1;
-        } else if (a.average_rating !== null && b.average_rating === null) {
-          return -1;
-        }
-        
-        if (b.progress_percent !== a.progress_percent) {
-          return b.progress_percent - a.progress_percent;
-        }
-        
-        return a.name.localeCompare(b.name, 'ru');
-      })
-      .slice(0, 50);
+          
+          if (b.progress_percent !== a.progress_percent) {
+            return b.progress_percent - a.progress_percent;
+          }
+          
+          return a.name.localeCompare(b.name, 'ru');
+        });
 
-    return NextResponse.json(result);
+      return NextResponse.json({
+        actors: result,
+        hasMore: offset + limit < allActors.length,
+        total: allActors.length,
+      });
+    }
+
+    // Возвращаем базовые данные без фильмографии
+    return NextResponse.json({
+      actors: baseActorsData,
+      hasMore: offset + limit < allActors.length,
+      total: allActors.length,
+    });
 
   } catch (error) {
     console.error('Ошибка при получении актеров:', error);
