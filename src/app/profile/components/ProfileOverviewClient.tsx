@@ -611,8 +611,9 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
               })
               .map((collection) => {
                 // Рассчитываем grayscale и saturate на основе прогресса
-                const grayscaleValue = 100 - collection.progress_percent;
-                const saturateValue = collection.progress_percent;
+                const filterStyle = {
+                  filter: `grayscale(${100 - collection.progress_percent}%) saturate(${collection.progress_percent}%)`
+                };
                 
                 return (
                   <Link
@@ -625,16 +626,12 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                       <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 border border-gray-700 group-hover:border-purple-500/50 transition-all relative">
                         {collection.poster_path ? (
                           <div className="relative w-full h-full">
-                            <div
-                              style={{ 
-                                filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
-                              }}
-                            >
+                            <div className="absolute inset-0 transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100" style={filterStyle}>
                               <ImageWithProxy
                                 src={`https://image.tmdb.org/t/p/w300${collection.poster_path}`}
                                 alt={collection.name}
                                 fill
-                                className="object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
+                                className="object-cover achievement-poster"
                                 sizes="120px"
                               />
                             </div>
@@ -738,8 +735,9 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                 // Используем progress_percent из API
                 const progressPercent = actor.progress_percent || 0;
                 // Рассчитываем grayscale и saturate на основе прогресса
-                const grayscaleValue = 100 - progressPercent;
-                const saturateValue = progressPercent;
+                const filterStyle = {
+                  filter: `grayscale(${100 - progressPercent}%) saturate(${progressPercent}%)`
+                };
                 
                 return (
                   <Link
@@ -752,16 +750,12 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                       <div className="aspect-[2/3] rounded-lg overflow-hidden bg-gray-800 border border-gray-700 group-hover:border-amber-500/50 transition-all relative">
                         {actor.profile_path ? (
                           <div className="w-full h-full relative">
-                            <div
-                              style={{ 
-                                filter: `grayscale(${grayscaleValue}%) saturate(${saturateValue}%)`
-                              }}
-                            >
+                            <div className="absolute inset-0 transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100" style={filterStyle}>
                               <ImageWithProxy
                                 src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`}
                                 alt={actor.name}
                                 fill
-                                className="object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
+                                className="object-cover achievement-poster"
                                 sizes="(max-width: 640px) 112px, (max-width: 768px) 144px, 144px"
                               />
                             </div>
