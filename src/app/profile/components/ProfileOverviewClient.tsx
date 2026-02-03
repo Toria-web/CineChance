@@ -772,7 +772,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-800">
                           <div 
                             className="h-full bg-amber-500"
-                            style={{ width: `${progressPercent}%` }}
+                            style={{ width: `${progress}%` }}
                           />
                         </div>
                         
