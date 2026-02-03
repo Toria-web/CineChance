@@ -5,6 +5,7 @@ import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { rateLimit } from "@/middleware/rateLimit";
+import { calculateWeightedRating } from "@/lib/calculateWeightedRating";
 
 // Маппинг: Код клиента -> Название в БД
 const STATUS_TO_DB: Record<string, string> = {
@@ -126,6 +127,17 @@ export async function POST(req: Request) {
       const newRating = userRating ? Number(userRating) : null;
       const isRatingChanged = newRating !== null && previousRating !== newRating;
 
+      // Расчитываем взвешенную оценку
+      let weightedValue = null;
+      if (newRating !== null) {
+        const weightedResult = await calculateWeightedRating(
+          session.user.id,
+          tmdbId,
+          mediaType
+        );
+        weightedValue = weightedResult.weightedRating;
+      }
+
       // Обновляем только оценку
       await prisma.watchList.update({
         where: {
@@ -137,6 +149,7 @@ export async function POST(req: Request) {
         },
         data: {
           userRating: newRating,
+          weightedRating: weightedValue, // Сохраняем взвешенную оценку
           title,
           voteAverage,
         },
@@ -282,6 +295,17 @@ export async function POST(req: Request) {
     const newRating = userRating ? Number(userRating) : null;
     const isRatingChanged = existingRecord && newRating !== null && previousRating !== newRating;
 
+    // Расчитываем взвешенную оценку
+    let weightedValue = null;
+    if (newRating !== null) {
+      const weightedResult = await calculateWeightedRating(
+        session.user.id,
+        tmdbId,
+        mediaType
+      );
+      weightedValue = weightedResult.weightedRating;
+    }
+
     const record = await prisma.watchList.upsert({
       where: {
         userId_tmdbId_mediaType: {
@@ -295,6 +319,7 @@ export async function POST(req: Request) {
         title,
         voteAverage,
         userRating: newRating,
+        weightedRating: weightedValue, // Сохраняем взвешенную оценку
         watchedDate: watchedDate ? new Date(watchedDate) : null,
         watchCount: isRewatch ? previousWatchCount + 1 : previousWatchCount,
       },
@@ -306,6 +331,7 @@ export async function POST(req: Request) {
         voteAverage,
         statusId: statusRecord.id,
         userRating: newRating,
+        weightedRating: weightedValue, // Сохраняем взвешенную оценку
         watchedDate: watchedDate ? new Date(watchedDate) : null,
         watchCount: isRewatch ? 1 : 0,
       },
