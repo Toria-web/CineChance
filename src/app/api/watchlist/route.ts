@@ -57,6 +57,7 @@ export async function GET(req: Request) {
       select: {
         status: { select: { name: true } },
         userRating: true,
+        weightedRating: true, // Добавляем новое поле
         watchedDate: true,
         watchCount: true,
       },
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
     // Возвращаем статус и данные оценки (если есть)
     return NextResponse.json({ 
       status: clientStatus,
-      userRating: record?.userRating,
+      userRating: record?.weightedRating ?? record?.userRating, // Fallback логика
       watchedDate: record?.watchedDate,
       watchCount: record?.watchCount || 0,
     });
