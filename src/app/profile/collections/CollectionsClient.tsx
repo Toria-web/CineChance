@@ -254,6 +254,9 @@ export default function CollectionsClient({ userId }: CollectionsClientProps) {
           grayscale = Math.max(0, Math.min(100, grayscale));
           saturate = Math.max(0.1, Math.min(2.5, saturate));
           
+          // Отладочная информация
+          console.log(`Collection ${collection.name}: progress=${progress}%, grayscale=${grayscale}%, saturate=${saturate}`);
+          
           const isImageLoaded = loadedImages.has(collection.id);
           
           return (
