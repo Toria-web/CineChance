@@ -105,27 +105,9 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
     if (!isFetchingNextPage) {
       isFetchingRef.current = false;
     }
-  }, [loadingMore]);
+  }, [isFetchingNextPage]);
 
-  const loadMore = async () => {
-    if (loadingMore || !hasMore) return;
-    
-    setLoadingMore(true);
-    await fetchActors(offset, true);
-    
-    // Дозагружаем полную фильмографию для новых актеров
-    const newActors = allActors.slice(-24);
-    if (newActors.some(actor => actor.total_movies === 0)) {
-      await loadFullDataForVisibleActors();
-    }
-    
-    setLoadingMore(false);
-  };
-
-  const visibleActors = allActors.slice(0, visibleCount);
-  const hasMoreVisible = visibleCount < allActors.length;
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         {/* Skeleton заголовка */}
@@ -136,15 +118,15 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
     );
   }
 
-  if (error) {
+  if (actorsQuery.error) {
     return (
       <div className="bg-red-900/30 border border-red-700 rounded-lg p-6">
-        <p className="text-red-300">{error}</p>
+        <p className="text-red-300">Не удалось загрузить актеров</p>
       </div>
     );
   }
 
-  if (allActors.length === 0) {
+  if (actors.length === 0) {
     return (
       <div className="bg-gray-900 rounded-lg md:rounded-xl p-6 border border-gray-800">
         <p className="text-gray-400 text-center py-10">
@@ -158,7 +140,7 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
     <>
       {/* Сетка актеров */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-        {visibleActors
+        {actors
           .sort((a, b) => {
             // Первичная сортировка по средней оценке (null в конце)
             if (a.average_rating !== null && b.average_rating !== null) {
@@ -179,12 +161,9 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
             // Третичная сортировка по алфавиту
             return a.name.localeCompare(b.name, 'ru');
           })
-          .map((actor) => {
+          .map((actor, index) => {
             // Более гибкая формула для цветности с нелинейной прогрессией
             const progress = actor.progress_percent || 0;
-            const grayscale = 100 - progress;
-            // Используем кубическую функцию для более естественного восприятия
-            const saturate = Math.max(0.2, Math.pow(progress / 100, 1.5));
             
             return (
               <Link
@@ -197,96 +176,81 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
                     {actor.profile_path ? (
                       <div className="w-full h-full relative">
                         <ImageWithProxy
-                          src={`https://image.tmdb.org/t/p/w300${actor.profile_path}`}
+                          src={`https://image.tmdb.org/t/p/w342${actor.profile_path}`}
                           alt={actor.name}
                           fill
-                          className="object-cover transition-all duration-300 group-hover:grayscale-0 group-hover:saturate-100 achievement-poster"
-                          sizes="120px"
-                          style={{ 
-                            filter: `grayscale(${grayscale}%) saturate(${saturate})`
-                          }}
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+                          className="object-cover"
+                          priority={index < 12}
+                          quality={80}
                         />
+                      </div>
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-600">
+                        <Users className="w-10 h-10" />
+                      </div>
+                    )}
+                    
+                    <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-800">
+                      <div 
+                        className="h-full bg-amber-500 transition-all duration-300"
+                        style={{ 
+                          width: `${progress}%`,
+                          opacity: progress === 0 ? 0.3 : 1
+                        }}
+                      />
                     </div>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-600">
-                      <Users className="w-10 h-10" />
+                    
+                    <div className="absolute top-2 right-2 bg-amber-600/90 text-white text-xs font-medium px-2 py-1 rounded">
+                      {progress}%
                     </div>
-                  )}
-                  
-                  <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-800">
-                    <div 
-                      className="h-full bg-amber-500 transition-all duration-300"
-                      style={{ 
-                        width: actor.total_movies === 0 ? '0%' : `${progress}%`,
-                        opacity: actor.total_movies === 0 ? 0.3 : 1
-                      }}
-                    />
                   </div>
                   
-                  <div className="absolute top-2 right-2 bg-amber-600/90 text-white text-xs font-medium px-2 py-1 rounded">
-                    {actor.total_movies === 0 ? (
-                      loadingFullData ? (
-                        <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin"></div>
-                      ) : (
-                        '...'
-                      )
-                    ) : (
-                      `${actor.progress_percent}%`
+                  <h3 className="mt-2 text-gray-300 text-sm truncate group-hover:text-amber-400 transition-colors">
+                    {actor.name}
+                  </h3>
+                  
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-gray-500 text-xs">
+                      <span className="text-green-400">{actor.watched_movies}</span>
+                      {' / '}
+                      <span>{actor.total_movies}</span>
+                      {' фильмов'}
+                    </p>
+                    {actor.average_rating !== null && (
+                      <div className="flex items-center bg-gray-800/50 rounded text-sm flex-shrink-0">
+                        <div className="w-5 h-5 relative mx-1">
+                          <Image 
+                            src="/images/logo_mini_lgt.png" 
+                            alt="CineChance Logo" 
+                            fill 
+                            className="object-contain" 
+                          />
+                        </div>
+                        <span className="text-gray-200 font-medium pr-2">
+                          {actor.average_rating.toFixed(1)}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
-                
-                <h3 className="mt-2 text-gray-300 text-sm truncate group-hover:text-amber-400 transition-colors">
-                  {actor.name}
-                </h3>
-                
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-gray-500 text-xs">
-                    <span className="text-green-400">{actor.watched_movies}</span>
-                    {' / '}
-                    <span className={actor.total_movies === 0 ? 'text-gray-600' : ''}>
-                      {actor.total_movies === 0 ? (
-                        loadingFullData ? '...' : 'фильмов'
-                      ) : (
-                        actor.total_movies
-                      )}
-                    </span>
-                    {actor.total_movies > 0 && ' фильмов'}
-                  </p>
-                  {actor.average_rating !== null && (
-                    <div className="flex items-center bg-gray-800/50 rounded text-sm flex-shrink-0">
-                      <div className="w-5 h-5 relative mx-1">
-                        <Image 
-                          src="/images/logo_mini_lgt.png" 
-                          alt="CineChance Logo" 
-                          fill 
-                          className="object-contain" 
-                        />
-                      </div>
-                      <span className="text-gray-200 font-medium pr-2">
-                        {actor.average_rating.toFixed(1)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Link>
-          );
-        })}
+              </Link>
+            );
+          })}
       </div>
 
       {/* Sentinel для infinite scroll */}
       <div ref={sentinelRef} className="h-4" />
 
       {/* Кнопка "Ещё" */}
-      {hasMore && (
+      {hasNextPage && (
         <div className="flex justify-center mt-6">
           <button
-            onClick={loadMore}
-            disabled={loadingMore}
+            onClick={handleFetchNextPage}
+            disabled={isFetchingNextPage}
             className="px-6 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
-            {loadingMore ? (
+            {isFetchingNextPage ? (
               <>
                 <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"></div>
                 Загрузка...
@@ -299,38 +263,15 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
       )}
 
       {/* Индикатор загрузки в конце */}
-      {loadingMore && (
+      {isFetchingNextPage && (
         <div className="flex justify-center mt-6">
           <Loader size="small" />
         </div>
       )}
 
       <p className="text-gray-500 text-sm text-center pt-4">
-        Показано {visibleActors.length} из {total} актеров
+        Показано {actors.length} из {totalCount} актеров
       </p>
-
-      {showScrollTop && (
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition-colors z-50"
-          aria-label="Наверх"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 10l7-7m0 0l7 7m-7-7v18"
-            />
-          </svg>
-        </button>
-      )}
     </>
   );
 }

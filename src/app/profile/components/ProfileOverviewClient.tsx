@@ -251,10 +251,11 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
   useEffect(() => {
     const fetchCollections = async () => {
       try {
-        const res = await fetch('/api/user/achiev_collection');
+        const res = await fetch('/api/user/achiev_collection?limit=5&offset=0');
         if (res.ok) {
           const data = await res.json();
-          setCollections(Array.isArray(data) ? data.slice(0, 5) : []);
+          // Обрабатываем новый формат ответа
+          setCollections(data.collections ? data.collections.slice(0, 5) : []);
         }
       } catch (error) {
         console.error('Failed to fetch collections:', error);
@@ -272,7 +273,8 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
   useEffect(() => {
     const fetchActors = async () => {
       try {
-        const res = await fetch('/api/user/achiev_actors?limit=5&fullData=true');
+        // Используем те же параметры что и на странице всех актеров для консистентности
+        const res = await fetch('/api/user/achiev_actors?limit=5&offset=0&fullData=false');
         if (res.ok) {
           const data = await res.json();
           // Обрабатываем новый формат ответа
