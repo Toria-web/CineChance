@@ -21,24 +21,13 @@ interface ActorsResults {
 
 const ITEMS_PER_PAGE = 24;
 
-const buildFetchParams = (
-  offset: number,
-  fullData: boolean
-) => {
-  const params: Record<string, any> = {
-    limit: ITEMS_PER_PAGE,
-    offset,
-    fullData: fullData.toString(),
-  };
-
-  return params;
-};
-
 const fetchActors = async (
-  offset: number,
-  fullData: boolean
+  offset: number
 ): Promise<ActorsResults> => {
-  const params = buildFetchParams(offset, fullData);
+  const params = {
+    limit: ITEMS_PER_PAGE.toString(),
+    offset: offset.toString(),
+  };
   const queryString = new URLSearchParams(params).toString();
   const response = await fetch(`/api/user/achiev_actors?${queryString}`);
 
@@ -65,7 +54,7 @@ export const useActors = (userId: string) => {
 
   const query = useInfiniteQuery({
     queryKey: ['actors', userId] as const,
-    queryFn: ({ pageParam = 0 }) => fetchActors(pageParam, false), // Загружаем базовые данные для пагинации
+    queryFn: ({ pageParam = 0 }) => fetchActors(pageParam),
     getNextPageParam: (lastPage, allPages) => {
       if (!lastPage.hasMore) return undefined;
       return allPages.reduce((acc, page) => acc + page.actors.length, 0);

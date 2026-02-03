@@ -274,7 +274,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
     const fetchActors = async () => {
       try {
         // Используем те же параметры что и на странице всех актеров для консистентности
-        const res = await fetch('/api/user/achiev_actors?limit=5&offset=0&fullData=false');
+        const res = await fetch('/api/user/achiev_actors?limit=5&offset=0');
         if (res.ok) {
           const data = await res.json();
           // Обрабатываем новый формат ответа

@@ -149,7 +149,6 @@ export async function GET(request: Request) {
     // Параметры пагинации
     const limit = Math.min(parseInt(searchParams.get('limit') || '24'), 50); // Максимум 50
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
-    const loadFullData = searchParams.get('fullData') === 'true'; // Загружать ли полную фильмографию
 
     // Получаем все фильмы и сериалы пользователя со статусом "Просмотрено"
     const watchedMoviesData = await prisma.watchList.findMany({
@@ -246,77 +245,70 @@ export async function GET(request: Request) {
     // Применяем пагинацию к подготовленным данным
     const paginatedActors = baseActorsData.slice(offset, offset + limit);
 
-    // Если нужна полная фильмография - загружаем ее для пагинированных актеров
-    if (loadFullData) {
-      const achievementsPromises = paginatedActors.map(async (actor) => {
-        const credits = await fetchPersonCredits(actor.id);
-        
-        const totalMovies = credits?.cast?.length || 0;
-        const watchedMovies = actor.watched_movies;
-        
-        const progressPercent = totalMovies > 0 
-          ? Math.round((watchedMovies / totalMovies) * 100)
-          : 0;
-
-        return {
-          ...actor,
-          total_movies: totalMovies,
-          progress_percent: progressPercent,
-        };
-      });
-
-      const result = await Promise.all(achievementsPromises);
+    // Всегда загружаем полную фильмографию для корректного отображения прогресса
+    const achievementsPromises = paginatedActors.map(async (actor) => {
+      const credits = await fetchPersonCredits(actor.id);
       
-      // Сортируем результат по тому же принципу
-      result.sort((a, b) => {
-        if (a.average_rating !== null && b.average_rating !== null) {
-          if (b.average_rating !== a.average_rating) {
-            return b.average_rating - a.average_rating;
-          }
-        } else if (a.average_rating === null && b.average_rating !== null) {
-          return 1;
-        } else if (a.average_rating !== null && b.average_rating === null) {
-          return -1;
-        }
+      // Фильтруем мультфильмы и аниме из фильмографии актера
+      let filteredCast = credits?.cast || [];
+      if (filteredCast.length > 0) {
+        const filteredCastDetails = await Promise.all(
+          filteredCast.map(async (movie) => {
+            // Определяем тип медиа: если есть release_date - это фильм, иначе сериал
+            const mediaType = movie.release_date ? 'movie' : 'tv';
+            const mediaDetails = await fetchMediaDetails(movie.id, mediaType);
+            return {
+              movie,
+              isAnime: mediaDetails ? isAnime(mediaDetails) : false,
+              isCartoon: mediaDetails ? isCartoon(mediaDetails) : false,
+            };
+          })
+        );
         
-        if (b.progress_percent !== a.progress_percent) {
-          return b.progress_percent - a.progress_percent;
-        }
-        
-        return a.name.localeCompare(b.name, 'ru');
-      });
+        filteredCast = filteredCastDetails
+          .filter(({ isAnime, isCartoon }) => !isAnime && !isCartoon)
+          .map(({ movie }) => movie);
+      }
+      
+      const totalMovies = filteredCast.length;
+      const watchedMovies = actor.watched_movies;
+      
+      const progressPercent = totalMovies > 0 
+        ? Math.round((watchedMovies / totalMovies) * 100)
+        : 0;
 
-      return NextResponse.json({
-        actors: result,
-        hasMore: offset + limit < baseActorsData.length,
-        total: baseActorsData.length,
-      });
-    }
+      return {
+        ...actor,
+        total_movies: totalMovies,
+        progress_percent: progressPercent,
+      };
+    });
 
-    // Возвращаем базовые данные без фильмографии, но с сортировкой
-    const sortedBaseActors = baseActorsData
-      .sort((a, b) => {
-        if (a.average_rating !== null && b.average_rating !== null) {
-          if (b.average_rating !== a.average_rating) {
-            return b.average_rating - a.average_rating;
-          }
-        } else if (a.average_rating === null && b.average_rating !== null) {
-          return 1;
-        } else if (a.average_rating !== null && b.average_rating === null) {
-          return -1;
+    const result = await Promise.all(achievementsPromises);
+    
+    // Сортируем результат по тому же принципу
+    result.sort((a, b) => {
+      if (a.average_rating !== null && b.average_rating !== null) {
+        if (b.average_rating !== a.average_rating) {
+          return b.average_rating - a.average_rating;
         }
-        
-        if (b.progress_percent !== a.progress_percent) {
-          return b.progress_percent - a.progress_percent;
-        }
-        
-        return a.name.localeCompare(b.name, 'ru');
-      });
+      } else if (a.average_rating === null && b.average_rating !== null) {
+        return 1;
+      } else if (a.average_rating !== null && b.average_rating === null) {
+        return -1;
+      }
+      
+      if (b.progress_percent !== a.progress_percent) {
+        return b.progress_percent - a.progress_percent;
+      }
+      
+      return a.name.localeCompare(b.name, 'ru');
+    });
 
     return NextResponse.json({
-      actors: sortedBaseActors,
-      hasMore: offset + limit < sortedBaseActors.length,
-      total: sortedBaseActors.length,
+      actors: result,
+      hasMore: offset + limit < baseActorsData.length,
+      total: baseActorsData.length,
     });
 
   } catch (error) {
