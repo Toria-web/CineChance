@@ -245,46 +245,74 @@ export async function GET(request: Request) {
 
     // Загружаем полную фильмографию для актеров
     if (singleLoad) {
-      // Единовременная загрузка - обрабатываем всех актеров сразу
-      const achievementsPromises = baseActorsData.map(async (actor) => {
-        const credits = await fetchPersonCredits(actor.id);
+      console.log(`Starting singleLoad for ${baseActorsData.length} actors with limit ${limit}`);
+      
+      // Ограничиваем количество актеров для обработки чтобы избежать таймаутов
+      const maxActorsToProcess = Math.min(baseActorsData.length, limit);
+      const actorsToProcess = baseActorsData.slice(0, maxActorsToProcess);
+      
+      console.log(`Processing ${actorsToProcess.length} actors for singleLoad`);
+      
+      // Единовременная загрузка - обрабатываем актеров пачками для оптимизации
+      const batchSize = 10; // Обрабатываем по 10 актеров за раз
+      const achievementsPromises = [];
+      
+      for (let i = 0; i < actorsToProcess.length; i += batchSize) {
+        const batch = actorsToProcess.slice(i, i + batchSize);
+        console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(actorsToProcess.length / batchSize)}`);
         
-        // Фильтруем мультфильмы и аниме из фильмографии актера
-        let filteredCast = credits?.cast || [];
-        if (filteredCast.length > 0) {
-          const filteredCastDetails = await Promise.all(
-            filteredCast.map(async (movie) => {
-              // Определяем тип медиа: если есть release_date - это фильм, иначе сериал
-              const mediaType = movie.release_date ? 'movie' : 'tv';
-              const mediaDetails = await fetchMediaDetails(movie.id, mediaType);
-              return {
-                movie,
-                isAnime: mediaDetails ? isAnime(mediaDetails) : false,
-                isCartoon: mediaDetails ? isCartoon(mediaDetails) : false,
-              };
-            })
-          );
-          
-          filteredCast = filteredCastDetails
-            .filter(({ isAnime, isCartoon }) => !isAnime && !isCartoon)
-            .map(({ movie }) => movie);
-        }
-        
-        const totalMovies = filteredCast.length;
-        const watchedMovies = actor.watched_movies;
-        
-        const progressPercent = totalMovies > 0 
-          ? Math.round((watchedMovies / totalMovies) * 100)
-          : 0;
+        const batchPromises = batch.map(async (actor) => {
+          try {
+            const credits = await fetchPersonCredits(actor.id);
+            
+            // Фильтруем мультфильмы и аниме из фильмографии актера
+            let filteredCast = credits?.cast || [];
+            if (filteredCast.length > 0) {
+              const filteredCastDetails = await Promise.all(
+                filteredCast.map(async (movie) => {
+                  // Определяем тип медиа: если есть release_date - это фильм, иначе сериал
+                  const mediaType = movie.release_date ? 'movie' : 'tv';
+                  const mediaDetails = await fetchMediaDetails(movie.id, mediaType);
+                  return {
+                    movie,
+                    isAnime: mediaDetails ? isAnime(mediaDetails) : false,
+                    isCartoon: mediaDetails ? isCartoon(mediaDetails) : false,
+                  };
+                })
+              );
+              
+              filteredCast = filteredCastDetails
+                .filter(({ isAnime, isCartoon }) => !isAnime && !isCartoon)
+                .map(({ movie }) => movie);
+            }
+            
+            const totalMovies = filteredCast.length;
+            const watchedMovies = actor.watched_movies;
+            
+            const progressPercent = totalMovies > 0 
+              ? Math.round((watchedMovies / totalMovies) * 100)
+              : 0;
 
-        return {
-          ...actor,
-          total_movies: totalMovies,
-          progress_percent: progressPercent,
-        };
-      });
+            return {
+              ...actor,
+              total_movies: totalMovies,
+              progress_percent: progressPercent,
+            };
+          } catch (error) {
+            console.error(`Error processing actor ${actor.id}:`, error);
+            // Возвращаем базовые данные в случае ошибки
+            return {
+              ...actor,
+              total_movies: 0,
+              progress_percent: 0,
+            };
+          }
+        });
+        
+        achievementsPromises.push(Promise.all(batchPromises));
+      }
 
-      const allActorsWithFullData = await Promise.all(achievementsPromises);
+      const allActorsWithFullData = (await Promise.all(achievementsPromises)).flat();
       
       // Сортируем всех актеров по полным данным
       allActorsWithFullData.sort((a, b) => {
@@ -307,6 +335,8 @@ export async function GET(request: Request) {
 
       // Возвращаем топ-N актеров
       const result = allActorsWithFullData.slice(0, limit);
+
+      console.log(`Successfully processed ${result.length} actors`);
 
       return NextResponse.json({
         actors: result,

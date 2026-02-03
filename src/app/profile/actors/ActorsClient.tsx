@@ -78,10 +78,20 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
           });
         }, 200);
 
-        const response = await fetch(`/api/user/achiev_actors?limit=${TOP_ACTORS_COUNT}&singleLoad=true`);
+        // Добавляем таймаут для предотвращения зависания
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 секунд таймаут
+
+        const response = await fetch(`/api/user/achiev_actors?limit=${TOP_ACTORS_COUNT}&singleLoad=true`, {
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
-          throw new Error('Failed to fetch actors');
+          const errorText = await response.text();
+          console.error('API Error:', response.status, errorText);
+          throw new Error(`API Error: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
@@ -103,7 +113,20 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
         }
         
         console.error('Failed to fetch actors:', err);
-        setError('Не удалось загрузить актеров');
+        
+        // Детальная обработка ошибок
+        let errorMessage = 'Не удалось загрузить актеров';
+        if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            errorMessage = 'Превышено время ожидания загрузки. Попробуйте обновить страницу.';
+          } else if (err.message.includes('API Error')) {
+            errorMessage = 'Ошибка сервера при загрузке актеров. Попробуйте позже.';
+          } else if (err.message.includes('Failed to fetch')) {
+            errorMessage = 'Проблемы с соединением. Проверьте интернет-соединение.';
+          }
+        }
+        
+        setError(errorMessage);
         setProgress(100);
         setLoading(false);
       }
@@ -149,7 +172,13 @@ export default function ActorsClient({ userId }: ActorsClientProps) {
   if (error) {
     return (
       <div className="bg-red-900/30 border border-red-700 rounded-lg p-6">
-        <p className="text-red-300">{error}</p>
+        <p className="text-red-300 mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+        >
+          Попробовать снова
+        </button>
       </div>
     );
   }

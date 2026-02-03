@@ -146,20 +146,26 @@ function AverageRatingSkeleton() {
   );
 }
 
-// Skeleton для горизонтального списка карточек (коллекции/актеры)
-function HorizontalListSkeleton() {
+// Skeleton для горизонтального списка карточек (коллекции/актеры) с индикатором загрузки
+function HorizontalListSkeleton({ title }: { title: string }) {
   return (
-    <div className="space-y-4 animate-pulse">
-      <div className="flex items-center gap-2">
-        <div className="w-5 h-5 bg-gray-700 rounded"></div>
-        <div className="h-5 w-32 bg-gray-700 rounded"></div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 bg-gray-700 rounded animate-pulse"></div>
+          <div className="h-5 w-32 bg-gray-700 rounded animate-pulse"></div>
+        </div>
+        <div className="flex items-center gap-2 text-gray-500 text-sm">
+          <div className="w-4 h-4 border-2 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
+          <span className="text-xs">Загрузка...</span>
+        </div>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
         {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="flex-shrink-0 w-28 sm:w-36">
-            <div className="aspect-[2/3] bg-gray-800 rounded-lg"></div>
-            <div className="mt-2 h-4 w-20 bg-gray-800 rounded"></div>
-            <div className="mt-1 h-3 w-16 bg-gray-900 rounded"></div>
+            <div className="aspect-[2/3] bg-gray-800 rounded-lg animate-pulse"></div>
+            <div className="mt-2 h-4 w-20 bg-gray-800 rounded animate-pulse"></div>
+            <div className="mt-1 h-3 w-16 bg-gray-900 rounded animate-pulse"></div>
           </div>
         ))}
       </div>
@@ -210,13 +216,20 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
     return () => clearTimeout(timer);
   }, [userId]);
 
-  // Загружаем статистику (быстрый запрос)
+  // Параллельная загрузка всех данных для быстрого старта
   useEffect(() => {
-    const fetchStats = async () => {
+    const loadAllData = async () => {
       try {
-        const res = await fetch('/api/user/stats');
-        if (res.ok) {
-          const data = await res.json();
+        // Запускаем все запросы параллельно без задержек
+        const [statsRes, collectionsRes, actorsRes] = await Promise.all([
+          fetch('/api/user/stats'),
+          fetch('/api/user/achiev_collection?limit=5&offset=0'),
+          fetch('/api/user/achiev_actors?limit=5&singleLoad=true')
+        ]);
+
+        // Обрабатываем статистику
+        if (statsRes.ok) {
+          const data = await statsRes.json();
           setStats({
             total: {
               watched: data.total?.watched || 0,
@@ -235,61 +248,30 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
             ratedCount: data.ratedCount || 0,
           });
         }
-      } catch (error) {
-        console.error('Failed to fetch stats:', error);
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-    
-    // Небольшая задержка для избежания rate limiting
-    const timer = setTimeout(fetchStats, 100);
-    return () => clearTimeout(timer);
-  }, []);
 
-  // Загружаем коллекции (медленный запрос - делаем в фоне)
-  useEffect(() => {
-    const fetchCollections = async () => {
-      try {
-        const res = await fetch('/api/user/achiev_collection?limit=5&offset=0');
-        if (res.ok) {
-          const data = await res.json();
-          // Обрабатываем новый формат ответа
+        // Обрабатываем коллекции
+        if (collectionsRes.ok) {
+          const data = await collectionsRes.json();
           setCollections(data.collections ? data.collections.slice(0, 5) : []);
         }
-      } catch (error) {
-        console.error('Failed to fetch collections:', error);
-      } finally {
-        setCollectionsLoading(false);
-      }
-    };
-    
-    // Небольшая задержка чтобы не блокировать основную загрузку
-    const timer = setTimeout(fetchCollections, 100);
-    return () => clearTimeout(timer);
-  }, []);
 
-  // Загружаем актеров (медленный запрос - делаем в фоне)
-  useEffect(() => {
-    const fetchActors = async () => {
-      try {
-        // Используем новый API с единовременной загрузкой для консистентности
-        const res = await fetch('/api/user/achiev_actors?limit=5&singleLoad=true');
-        if (res.ok) {
-          const data = await res.json();
-          // Обрабатываем новый формат ответа
+        // Обрабатываем актеров
+        if (actorsRes.ok) {
+          const data = await actorsRes.json();
           setActors(data.actors ? data.actors.slice(0, 5) : []);
         }
+
       } catch (error) {
-        console.error('Failed to fetch actors:', error);
+        console.error('Failed to load profile data:', error);
       } finally {
+        // Завершаем все состояния загрузки одновременно
+        setStatsLoading(false);
+        setCollectionsLoading(false);
         setActorsLoading(false);
       }
     };
-    
-    // Небольшая задержка чтобы не блокировать основную загрузку
-    const timer = setTimeout(fetchActors, 200);
-    return () => clearTimeout(timer);
+
+    loadAllData();
   }, []);
 
   // Определяем мобильное устройство
@@ -580,7 +562,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
 
       {/* Кинофраншизы */}
       {collectionsLoading ? (
-        <HorizontalListSkeleton />
+        <HorizontalListSkeleton title="Кинофраншизы" />
       ) : collections.length > 0 ? (
         <div className="space-y-4">
           {/* Заголовок секции */}
@@ -704,7 +686,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
 
       {/* Любимые актеры */}
       {actorsLoading ? (
-        <HorizontalListSkeleton />
+        <HorizontalListSkeleton title="Любимые актеры" />
       ) : actors.length > 0 ? (
         <div className="space-y-4">
           {/* Заголовок секции */}
