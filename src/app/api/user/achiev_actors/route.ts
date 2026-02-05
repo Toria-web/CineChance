@@ -371,7 +371,7 @@ export async function GET(request: Request) {
       id: actorId,
       name: actorData.name,
       profile_path: actorData.profile_path,
-      watched_movies: actorData.watchedIds.size,
+      watched_movies: actorData.watchedIds.size + actorData.rewatchedIds.size, // Считаем и просмотренные, и пересмотренные
       rewatched_movies: actorData.rewatchedIds.size,
       dropped_movies: actorData.droppedIds.size,
       total_movies: 0, // Будет загружено позже
@@ -402,10 +402,13 @@ export async function GET(request: Request) {
         
         const batchPromises = batch.map(async (actor) => {
           try {
+            console.log(`Processing actor ${actor.id}: ${actor.name}`);
             const credits = await fetchPersonCredits(actor.id);
             
             // Фильтруем мультфильмы и аниме из фильмографии актера
             let filteredCast = credits?.cast || [];
+            console.log(`Actor ${actor.name} has ${filteredCast.length} total movies before filtering`);
+            
             if (filteredCast.length > 0) {
               const filteredCastDetails = await Promise.all(
                 filteredCast.map(async (movie) => {
@@ -423,14 +426,18 @@ export async function GET(request: Request) {
               filteredCast = filteredCastDetails
                 .filter(({ isAnime, isCartoon }) => !isAnime && !isCartoon)
                 .map(({ movie }) => movie);
+              
+              console.log(`Actor ${actor.name} has ${filteredCast.length} movies after filtering (removed anime/cartoon)`);
             }
             
             const totalMovies = filteredCast.length;
-            const watchedMovies = actor.watched_movies;
+            const watchedMovies = actor.watched_movies; // Теперь включает и пересмотренные!
             
             const progressPercent = totalMovies > 0 
               ? Math.round((watchedMovies / totalMovies) * 100)
               : 0;
+
+            console.log(`Actor ${actor.name}: watched=${watchedMovies}, total=${totalMovies}, progress=${progressPercent}%`);
 
             return {
               ...actor,
@@ -438,12 +445,12 @@ export async function GET(request: Request) {
               progress_percent: progressPercent,
             };
           } catch (error) {
-            console.error(`Error processing actor ${actor.id}:`, error);
-            // Возвращаем базовые данные в случае ошибки
+            console.error(`Error processing actor ${actor.id} (${actor.name}):`, error);
+            // Возвращаем базовые данные в случае ошибки, но сохраняем watched_movies
             return {
               ...actor,
-              total_movies: 0,
-              progress_percent: 0,
+              total_movies: actor.watched_movies, // Минимум - количество просмотренных
+              progress_percent: actor.watched_movies > 0 ? 100 : 0, // Если есть просмотренные, считаем что 100%
             };
           }
         });
