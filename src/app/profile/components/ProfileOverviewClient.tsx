@@ -1,7 +1,7 @@
 // src/app/profile/components/ProfileOverviewClient.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import ImageWithProxy from '@/app/components/ImageWithProxy';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -9,9 +9,8 @@ import { ru } from 'date-fns/locale';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 const TermsOfServiceModal = dynamic(() => import('@/app/components/TermsOfServiceModal'), { ssr: false });
-import { FileText, Settings, Users, ArrowRight, Clock, Star, TrendingUp, Monitor, Tv, Film, CheckIcon, PlusIcon, XIcon, BanIcon, Smile, Clock as ClockIcon, EyeOff as EyeOffIcon, PieChart as PieChartIcon, Star as StarIcon } from 'lucide-react';
+import { FileText, Settings, Users, ArrowRight, Star, TrendingUp, Monitor, Tv, Film, CheckIcon, XIcon, Smile, Clock as ClockIcon, EyeOff as EyeOffIcon, PieChart as PieChartIcon, Star as StarIcon, Tag as TagIcon, Music } from 'lucide-react';
 import NicknameEditor from './NicknameEditor';
-import Loader from '@/app/components/Loader';
 import '@/app/profile/components/AchievementCards.css';
 
 interface UserStats {
@@ -30,6 +29,7 @@ interface UserStats {
   };
   averageRating: number | null;
   ratedCount: number;
+  ratingDistribution: Record<number, number>;
 }
 
 interface UserStatsData {
@@ -62,6 +62,18 @@ interface ActorAchievement {
   progress_percent: number;
   average_rating: number | null;
   actor_score: number;
+}
+
+interface TagUsage {
+  id: string;
+  name: string;
+  count: number;
+}
+
+interface GenreData {
+  id: number;
+  name: string;
+  count: number;
 }
 
 interface ProfileOverviewClientProps {
@@ -176,6 +188,51 @@ function HorizontalListSkeleton({ title }: { title: string }) {
   );
 }
 
+// Skeleton для блока тегов
+function TagsSkeleton() {
+  return (
+    <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800 animate-pulse">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-4 h-4 bg-gray-700 rounded"></div>
+        <div className="h-4 w-24 bg-gray-700 rounded"></div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="h-7 w-20 bg-gray-700 rounded-full"></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Skeleton для блока жанров
+function GenresSkeleton() {
+  return (
+    <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800 animate-pulse">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-4 h-4 bg-gray-700 rounded"></div>
+        <div className="h-4 w-24 bg-gray-700 rounded"></div>
+      </div>
+      <div className="space-y-3">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="w-5 h-5 bg-gray-700 rounded"></div>
+            <div className="flex-1">
+              <div className="flex justify-between items-center mb-1">
+                <div className="h-4 w-16 bg-gray-700 rounded"></div>
+                <div className="h-4 w-8 bg-gray-700 rounded"></div>
+              </div>
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full w-1/2 bg-gray-700 rounded-full"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ProfileOverviewClient({ userId }: ProfileOverviewClientProps) {
   const [userData, setUserData] = useState<UserStatsData | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -192,6 +249,10 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
   const [collectionsLoading, setCollectionsLoading] = useState(true);
   const [actors, setActors] = useState<ActorAchievement[]>([]);
   const [actorsLoading, setActorsLoading] = useState(true);
+  const [tagUsage, setTagUsage] = useState<TagUsage[]>([]);
+  const [tagUsageLoading, setTagUsageLoading] = useState(true);
+  const [watchedGenres, setWatchedGenres] = useState<GenreData[]>([]);
+  const [watchedGenresLoading, setWatchedGenresLoading] = useState(true);
 
   // Загружаем данные пользователя (быстрый запрос)
   useEffect(() => {
@@ -254,6 +315,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
             },
             averageRating: null,
             ratedCount: 0,
+            ratingDistribution: {},
           });
           setBasicStatsLoading(false);
           
@@ -275,11 +337,12 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
           // Еще одна небольшая задержка
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          // В конце отображаем среднюю оценку
+          // В конце отображаем среднюю оценку и распределение оценок
           setStats(prev => prev ? ({
             ...prev,
             averageRating: data.averageRating || null,
             ratedCount: data.ratedCount || 0,
+            ratingDistribution: data.ratingDistribution || {},
           }) : null);
           setAverageRatingLoading(false);
         } else {
@@ -310,6 +373,26 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
         }
         setActorsLoading(false);
 
+        // Этап 4: Загружаем теги пользователя
+        setTagUsageLoading(true);
+        const tagUsageRes = await fetch('/api/user/tag-usage?limit=10');
+        
+        if (tagUsageRes.ok) {
+          const data = await tagUsageRes.json();
+          setTagUsage(data.tags || []);
+        }
+        setTagUsageLoading(false);
+
+        // Этап 5: Загружаем жанры просмотренного
+        setWatchedGenresLoading(true);
+        const genresRes = await fetch('/api/user/genres?statuses=watched,rewatched&limit=50');
+        
+        if (genresRes.ok) {
+          const data = await genresRes.json();
+          setWatchedGenres(data.genres ? data.genres.slice(0, 10) : []);
+        }
+        setWatchedGenresLoading(false);
+
       } catch (error) {
         // Graceful error handling - in case of errors, stop loading spinners
         setStatsLoading(false);
@@ -318,6 +401,8 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
         setAverageRatingLoading(false);
         setCollectionsLoading(false);
         setActorsLoading(false);
+        setTagUsageLoading(false);
+        setWatchedGenresLoading(false);
       }
     };
 
@@ -492,7 +577,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-gray-300 text-sm">Фильмы</span>
-                      <span className="text-white font-medium">{stats.typeBreakdown.movie}</span>
+                      <span className="text-white text-xs">{stats.typeBreakdown.movie}</span>
                     </div>
                     <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                       <div 
@@ -512,7 +597,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-gray-300 text-sm">Сериалы</span>
-                      <span className="text-white font-medium">{stats.typeBreakdown.tv}</span>
+                      <span className="text-white text-xs">{stats.typeBreakdown.tv}</span>
                     </div>
                     <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                       <div 
@@ -532,7 +617,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-gray-300 text-sm">Мультфильмы</span>
-                      <span className="text-white font-medium">{stats.typeBreakdown.cartoon}</span>
+                      <span className="text-white text-xs">{stats.typeBreakdown.cartoon}</span>
                     </div>
                     <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                       <div 
@@ -552,7 +637,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                   <div className="flex-1">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-gray-300 text-sm">Аниме</span>
-                      <span className="text-white font-medium">{stats.typeBreakdown.anime}</span>
+                      <span className="text-white text-xs">{stats.typeBreakdown.anime}</span>
                     </div>
                     <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                       <div 
@@ -601,9 +686,170 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                   </p>
                 </div>
               </div>
+
+              {/* Распределение оценок 10→1 */}
+              {stats?.ratingDistribution && (() => {
+                const distribution = stats.ratingDistribution;
+                const totalRatings = Object.values(distribution).reduce((sum, count) => sum + count, 0);
+                
+                // Если нет оценок, не показываем секцию распределения
+                if (totalRatings === 0) {
+                  return null;
+                }
+                
+                const maxValue = Math.max(...Object.values(distribution), 0);
+                
+                return (
+                  <div className="mt-2 pt-4 border-t border-gray-800">
+                    <div className="space-y-3">
+                      {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((rating) => {
+                        const count = distribution[rating] || 0;
+                        if (count === 0) return null;
+                        
+                        const barWidth = maxValue > 0 ? (count / maxValue) * 100 : 0;
+                        
+                        return (
+                          <div key={rating} className="flex items-center gap-3">
+                            {/* Звезда с цифрой оценки */}
+                            <div className="relative w-7 h-7 flex-shrink-0">
+                              <svg 
+                                width="28" 
+                                height="28" 
+                                viewBox="0 0 32 32" 
+                                fill="none" 
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="absolute inset-0 w-full h-full"
+                              >
+                                <path 
+                                  d="M16 2L21 10L29 12L24 18L24 27L16 24L8 27L8 18L3 12L11 10L16 2Z" 
+                                  stroke="#FFD700" 
+                                  strokeWidth="1.5" 
+                                  fill="none"
+                                />
+                              </svg>
+                              <span className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold z-10" style={{ transform: 'translateY(0.5px)' }}>
+                                {rating}
+                              </span>
+                            </div>
+                            
+                            <div className="flex-1">
+                              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-yellow-400 rounded-full transition-all duration-500"
+                                  style={{ width: `${barWidth}%` }}
+                                />
+                              </div>
+                            </div>
+                            
+                            <span className="text-gray-300 text-xs w-6 text-right">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
         </div>
+      </div>
+
+      {/* Новые блоки статистики: Теги и Жанры */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+        {/* Теги пользователя */}
+        {tagUsageLoading ? (
+          <TagsSkeleton />
+        ) : tagUsage.length > 0 ? (
+          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+            <div className="flex items-center gap-2 mb-4">
+              <TagIcon className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-sm font-medium text-white">Теги пользователя</h3>
+            </div>
+            <div className="space-y-3">
+              {tagUsage.slice(0, 8).map((tag) => {
+                const totalTags = tagUsage.reduce((sum, t) => sum + t.count, 0);
+                const percentage = totalTags > 0 ? (tag.count / totalTags) * 100 : 0;
+                
+                return (
+                  <div key={tag.id} className="flex items-center gap-3">
+                    <div className="w-5 h-5 bg-cyan-400/20 rounded flex items-center justify-center flex-shrink-0">
+                      <TagIcon className="w-3 h-3 text-cyan-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-300 text-sm">{tag.name}</span>
+                        <span className="text-white text-xs">{tag.count}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-cyan-500 rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : !tagUsageLoading && tagUsage.length === 0 ? (
+          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+            <div className="flex items-center gap-2 mb-4">
+              <TagIcon className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-sm font-medium text-white">Теги пользователя</h3>
+            </div>
+            <p className="text-gray-500 text-sm">Пока нет тегов. Добавляйте их при оценке фильма.</p>
+          </div>
+        ) : null}
+
+        {/* Жанры просмотренного */}
+        {watchedGenresLoading ? (
+          <GenresSkeleton />
+        ) : watchedGenres.length > 0 ? (
+          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+            <div className="flex items-center gap-2 mb-4">
+              <Music className="w-4 h-4 text-pink-400" />
+              <h3 className="text-sm font-medium text-white">Жанры просмотренного</h3>
+            </div>
+            <div className="space-y-3">
+              {watchedGenres.slice(0, 8).map((genre) => {
+                const totalWatched = watchedGenres.reduce((sum, g) => sum + g.count, 0);
+                const percentage = totalWatched > 0 ? (genre.count / totalWatched) * 100 : 0;
+                
+                return (
+                  <div key={genre.id} className="flex items-center gap-3">
+                    <div className="w-5 h-5 bg-pink-400/20 rounded flex items-center justify-center flex-shrink-0">
+                      <Music className="w-3 h-3 text-pink-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-gray-300 text-sm">{genre.name}</span>
+                        <span className="text-white text-xs">{genre.count}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-pink-500 rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {watchedGenres.length === 0 && (
+              <p className="text-gray-500 text-sm">Жанры появятся после просмотра фильмов.</p>
+            )}
+          </div>
+        ) : !watchedGenresLoading && watchedGenres.length === 0 ? (
+          <div className="bg-gray-900 rounded-lg md:rounded-xl p-4 md:p-5 border border-gray-800">
+            <div className="flex items-center gap-2 mb-4">
+              <Music className="w-4 h-4 text-pink-400" />
+              <h3 className="text-sm font-medium text-white">Жанры просмотренного</h3>
+            </div>
+            <p className="text-gray-500 text-sm">Жанры появятся после просмотра фильмов.</p>
+          </div>
+        ) : null}
       </div>
 
       {/* Кинофраншизы */}
