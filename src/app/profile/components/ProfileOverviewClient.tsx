@@ -30,6 +30,7 @@ interface UserStats {
   };
   averageRating: number | null;
   ratedCount: number;
+  ratingDistribution: Record<number, number>;
 }
 
 interface UserStatsData {
@@ -254,6 +255,7 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
             },
             averageRating: null,
             ratedCount: 0,
+            ratingDistribution: {},
           });
           setBasicStatsLoading(false);
           
@@ -275,11 +277,12 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
           // Еще одна небольшая задержка
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          // В конце отображаем среднюю оценку
+          // В конце отображаем среднюю оценку и распределение оценок
           setStats(prev => prev ? ({
             ...prev,
             averageRating: data.averageRating || null,
             ratedCount: data.ratedCount || 0,
+            ratingDistribution: data.ratingDistribution || {},
           }) : null);
           setAverageRatingLoading(false);
         } else {
@@ -601,6 +604,45 @@ export default function ProfileOverviewClient({ userId }: ProfileOverviewClientP
                   </p>
                 </div>
               </div>
+
+              {/* Распределение оценок 10→1 */}
+              {stats?.ratingDistribution && (() => {
+                const distribution = stats.ratingDistribution;
+                const totalRatings = Object.values(distribution).reduce((sum, count) => sum + count, 0);
+                
+                // Если нет оценок, не показываем секцию распределения
+                if (totalRatings === 0) {
+                  return null;
+                }
+                
+                const maxValue = Math.max(...Object.values(distribution), 0);
+                
+                return (
+                  <div className="mt-4 pt-4 border-t border-gray-800">
+                    <div className="space-y-2">
+                      {[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((rating) => {
+                        const count = distribution[rating] || 0;
+                        if (count === 0) return null;
+                        
+                        const barWidth = maxValue > 0 ? (count / maxValue) * 100 : 0;
+                        
+                        return (
+                          <div key={rating} className="flex items-center gap-2">
+                            <span className="text-gray-400 text-xs w-4 text-right">{rating}</span>
+                            <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-yellow-400 rounded-full transition-all duration-500"
+                                style={{ width: `${barWidth}%` }}
+                              />
+                            </div>
+                            <span className="text-gray-300 text-xs w-6">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
         </div>
