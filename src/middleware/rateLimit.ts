@@ -36,10 +36,11 @@ function getRedis(): Redis | null {
 const endpointLimits: Record<string, { points: number; duration: number }> = {
   '/api/search': { points: 100, duration: 60 }, // 100 запросов в минуту для поиска
   '/api/recommendations': { points: 30, duration: 60 }, // 30 запросов в минуту
-  '/api/user': { points: 60, duration: 60 }, // 60 запросров в минуту
+  '/api/user': { points: 60, duration: 60 }, // 60 запросов в минуту
   '/api/watchlist': { points: 200, duration: 60 }, // 200 запросов в минуту для batch-загрузки
   '/api/cine-chance-rating': { points: 300, duration: 60 }, // 300 запросов в минуту для деталей фильмов
   '/api/movie-details': { points: 300, duration: 60 }, // 300 запросов в минуту для деталей фильмов
+  '/api/image-proxy': { points: 300, duration: 60 }, // 300 запросов в минуту (20 фильмов × 2 попытки = 40 req, достаточно даже с запасом)
   'default': { points: 100, duration: 60 }, // 100 запросов в минуту
 };
 

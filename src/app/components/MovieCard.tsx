@@ -101,7 +101,12 @@ export default function MovieCard({
   const title = movie.title || movie.name || 'Без названия';
   const date = movie.release_date || movie.first_air_date;
   const year = date ? date.split('-')[0] : '—';
-  const isAnimeQuick = movie.genre_ids?.includes(16) && movie.original_language === 'ja';
+  
+  // Расчитываем isAnimeQuick с fallback на undefined чтобы избежать hydration mismatch
+  const isAnimeQuick = useMemo(() => {
+    if (!movie.genre_ids || !movie.original_language) return false;
+    return movie.genre_ids.includes(16) && movie.original_language === 'ja';
+  }, [movie.genre_ids, movie.original_language]);
 
   const combinedRating = useMemo(() => {
     return calculateCineChanceScore({
@@ -551,7 +556,12 @@ export default function MovieCard({
         className="w-full h-full min-w-0 relative"
       >
         <div className="relative">
-          <div className={`${isAnimeQuick ? 'bg-[#9C40FE]' : (movie.media_type === 'movie' ? 'bg-green-500' : 'bg-blue-500')} text-white text-xs font-semibold px-2 py-1.5 rounded-t-lg w-full text-center`}>
+          <div 
+            className="text-white text-xs font-semibold px-2 py-1.5 rounded-t-lg w-full text-center"
+            style={{
+              backgroundColor: isAnimeQuick ? '#9C40FE' : (movie.media_type === 'movie' ? '#22c55e' : '#3b82f6')
+            }}
+          >
             {isAnimeQuick ? 'Аниме' : (movie.media_type === 'movie' ? 'Фильм' : 'Сериал')}
           </div>
           
