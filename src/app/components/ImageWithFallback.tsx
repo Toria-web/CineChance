@@ -54,6 +54,7 @@ export default function ImageWithFallback({
         onError={handleError}
         onLoad={handleLoadingComplete}
         quality={75}
+        unoptimized={true}
       />
       {isLoading && !error && blurDataURL && (
         <div className="absolute inset-0 bg-gray-800 animate-pulse" />

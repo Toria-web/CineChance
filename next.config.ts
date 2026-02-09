@@ -6,7 +6,11 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig: NextConfig = {
   images: {
-    qualities: [75, 85],
+    // ⚠️ CRITICAL: Отключаем Image Optimization полностью чтобы не сжечь лимит Vercel
+    // Все изображения загружаются как-есть без обработки на Vercel
+    unoptimized: true,
+    
+    // Разрешаем внешние домены (но они не будут оптимизироваться)
     remotePatterns: [
       {
         protocol: "https",
@@ -19,24 +23,26 @@ const nextConfig: NextConfig = {
         pathname: "/**",
       },
     ],
-    // Отключаем оптимизацию для внешних изображений - используем наш прокси
-    unoptimized: true,
-    // Увеличиваем timeout для медленных соединений
+    
+    // Эти параметры игнорируются если unoptimized: true, но оставляем для документации
+    qualities: [75, 85],
     minimumCacheTTL: 60,
-    // Отключаем device sizes для мобильных
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
 
   experimental: {
-    serverActions: {
-      // Разрешаем Server Actions с preview-доменов GitHub Codespaces
-      allowedOrigins: [
-        'localhost:3000',
-        '*.app.github.dev',
-        '*.github.dev',
-      ],
-    },
+    serverActions: process.env.NODE_ENV === 'production'
+      ? {
+          allowedOrigins: [
+            'cinechance.vercel.app',
+            'www.cinechance.vercel.app',
+          ],
+        }
+      : {
+          // Dev режим - отключаем валидацию origin для Server Actions
+          // На локальной машине и в контейнерах могут быть разные proxy настройки
+        },
   },
 
   // Исключаем TypeScript файлы в scripts из сборки

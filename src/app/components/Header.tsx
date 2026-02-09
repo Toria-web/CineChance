@@ -86,6 +86,7 @@ export default function Header({ toggleSidebar, isSidebarOpen }: HeaderProps) {
               fill
               className="object-contain"
               priority
+              unoptimized={true}
             />
           </div>
           
