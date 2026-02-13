@@ -53,6 +53,9 @@ export const fetchTrendingMovies = async (timeWindow: 'day' | 'week' = 'week'): 
     url.searchParams.append('api_key', TMDB_API_KEY || '');
     url.searchParams.append('language', 'ru-RU');
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
     const response = await fetch(url.toString(), {
       headers: {
         'accept': 'application/json',
@@ -61,7 +64,10 @@ export const fetchTrendingMovies = async (timeWindow: 'day' | 'week' = 'week'): 
         revalidate: 3600, // ISR: обновление раз в час
         tags: ['trending-movies', 'home-page'] 
       },
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -105,10 +111,16 @@ export const fetchPopularMovies = async (page: number = 1): Promise<Media[]> => 
     url.searchParams.append('language', 'ru-RU');
     url.searchParams.append('page', page.toString());
     
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
     const response = await fetch(url.toString(), {
       headers: { 'accept': 'application/json' },
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -154,10 +166,16 @@ export const searchMedia = async (query: string, page: number = 1): Promise<Medi
     url.searchParams.append('language', 'ru-RU');
     url.searchParams.append('page', page.toString());
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(url.toString(), {
       headers: { 'accept': 'application/json' },
       next: { revalidate: 3600 },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       logger.error('Ошибка TMDB search', { status: response.status, context: 'TMDB' });
@@ -224,10 +242,16 @@ export const fetchMediaDetails = async (
     url.searchParams.append('language', 'ru-RU');
     url.searchParams.append('append_to_response', 'credits');
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(url.toString(), {
       headers: { 'accept': 'application/json' },
       next: { revalidate: 86400 }, // Кэшируем на 24 часа
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       logger.error('Ошибка TMDB details', { status: response.status, context: 'TMDB' });
@@ -257,3 +281,77 @@ export const fetchMediaDetails = async (
     return null;
   }
 };
+
+/**
+ * Получает постер фильма из FANART_TV (резервный источник)
+ * @param tmdbId - ID фильма в TMDB
+ * @param mediaType - тип медиа ('movie' или 'tv')
+ * @returns URL постера из FANART_TV или null
+ */
+export const getFanartTvPoster = async (
+  tmdbId: number,
+  mediaType: 'movie' | 'tv' = 'movie'
+): Promise<string | null> => {
+  const FANART_API_KEY = process.env.FANART_API_KEY;
+  
+  if (!FANART_API_KEY) {
+    // FANART_API_KEY опциональный, просто логируем что его нет
+    return null;
+  }
+
+  try {
+    const endpoint = mediaType === 'tv' ? 'series' : 'movies';
+    const url = `https://webservice.fanart.tv/v3/${endpoint}/${tmdbId}?api_key=${FANART_API_KEY}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 секунды таймаут
+    
+    const response = await fetch(url, {
+      headers: {
+        'accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      logger.warn('FANART_TV API не вернул постер', {
+        status: response.status,
+        tmdbId,
+        mediaType,
+        context: 'FANART_TV'
+      });
+      return null;
+    }
+    
+    const data = await response.json();
+    
+    // Ищем постер в приоритете: movieposter (основной) → moviethumb (превью)
+    // Берем первый из доступных (Fanart.tv возвращает массивы)
+    const posters = data.movieposter || data.tvposter || [];
+    if (Array.isArray(posters) && posters.length > 0) {
+      const poster = posters[0];
+      return poster.url || null;
+    }
+    
+    // Альтернатива - thumbs
+    const thumbs = data.moviethumb || data.tvthumb || [];
+    if (Array.isArray(thumbs) && thumbs.length > 0) {
+      const thumb = thumbs[0];
+      return thumb.url || null;
+    }
+    
+    logger.debug('No poster found in FANART_TV', { tmdbId, mediaType, context: 'FANART_TV' });
+    return null;
+  } catch (error) {
+    logger.warn('Ошибка при получении постера из FANART_TV', {
+      error: error instanceof Error ? error.message : String(error),
+      tmdbId,
+      mediaType,
+      context: 'FANART_TV'
+    });
+    return null;
+  }
+};
+

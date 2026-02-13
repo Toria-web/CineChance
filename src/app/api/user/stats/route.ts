@@ -146,6 +146,37 @@ export async function GET(request: NextRequest) {
     // Общее количество оценённых фильмов
     const ratedCount = (avgRatingResult._count.weightedRating || 0) + (avgRatingResult._count.userRating || 0);
 
+    // Распределение оценок 10→1
+    // Группируем по userRating с фильтром статусов WATCHED/REWATCHED
+    const ratingGroups = await prisma.watchList.groupBy({
+      by: ['userRating'],
+      where: {
+        userId,
+        statusId: { in: [MOVIE_STATUS_IDS.WATCHED, MOVIE_STATUS_IDS.REWATCHED] },
+        userRating: { not: null },
+      },
+      _count: {
+        userRating: true,
+      },
+    });
+
+    // Нормализуем результат в словарь с ключами 10..1 и нулями по умолчанию
+    // Используем Math.round для округления дробных оценок
+    const ratingDistribution: Record<number, number> = {};
+    for (let i = 10; i >= 1; i--) {
+      ratingDistribution[i] = 0;
+    }
+
+    // Заполняем словарь данными из группировки
+    for (const group of ratingGroups) {
+      if (group.userRating !== null) {
+        const roundedRating = Math.round(group.userRating);
+        if (roundedRating >= 1 && roundedRating <= 10) {
+          ratingDistribution[roundedRating] = group._count.userRating;
+        }
+      }
+    }
+
     // Общая сумма для расчета процентов (все статусы кроме скрытых)
     const totalForPercentage = watchedCount + wantToWatchCount + droppedCount;
 
@@ -179,6 +210,7 @@ export async function GET(request: NextRequest) {
       typeBreakdown: typeCounts,
       averageRating: finalAverageRating,
       ratedCount,
+      ratingDistribution,
       debug: debugInfo,
     };
 

@@ -14,7 +14,16 @@ async function fetchMediaDetails(tmdbId: number, mediaType: 'movie' | 'tv') {
   if (!apiKey) return null;
   const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${apiKey}&language=ru-RU`;
   try {
-    const res = await fetch(url, { next: { revalidate: 86400 } });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const res = await fetch(url, { 
+      next: { revalidate: 86400 },
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
     if (!res.ok) return null;
     return await res.json();
   } catch (error) {
@@ -47,7 +56,15 @@ async function fetchCineChanceRatings(tmdbIds: number[]) {
 
 // Helper function to check if movie is anime
 function isAnime(movie: any): boolean {
-  const hasAnimeGenre = movie.genre_ids?.includes(16) ?? false;
+  // Может быть genre_ids (массив чисел) или genres (массив объектов)
+  let hasAnimeGenre = false;
+  
+  if (Array.isArray(movie.genre_ids)) {
+    hasAnimeGenre = movie.genre_ids.includes(16);
+  } else if (Array.isArray(movie.genres)) {
+    hasAnimeGenre = movie.genres.some((g: any) => g.id === 16);
+  }
+  
   return hasAnimeGenre && movie.original_language === 'ja';
 }
 
@@ -88,10 +105,35 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Add tag filter to WHERE clause for efficient database filtering
+    if (tagsParam) {
+      const tagIds = tagsParam.split(',');
+      whereClause.tags = {
+        some: {
+          id: { in: tagIds }
+        }
+      };
+    }
+
+    // Calculate records to load based on filters
+    const hasTypeFilters = typesParam && typesParam.split(',').length < 3;
+    const hasOtherFilters = genresParam || yearFrom || yearTo || (minRating > 0 || maxRating < 10);
+    
+    // Load enough records to handle in-memory filtering, but at least 50 for efficiency
+    let recordsToLoadPerPage = limit;
+    if (hasTypeFilters) {
+      recordsToLoadPerPage = Math.max(limit * 5, 50); // 5x for type filters
+    } else if (hasOtherFilters) {
+      recordsToLoadPerPage = Math.max(limit * 2, 50); // 2x for other filters  
+    }
+    recordsToLoadPerPage = Math.min(recordsToLoadPerPage, 500);
+
     if (includeHidden) {
       // For hidden tab, we use blacklist
-      const skip = (page - 1) * limit;
-      const take = limit + 1;
+      // Load enough to fill current page with buffer
+      const recordsNeeded = Math.ceil(page * limit * 1.5) + 1; // 50% buffer + 1
+      const skip = 0;
+      const take = Math.min(recordsNeeded, 500);
 
       // Count total
       const totalCount = await prisma.blacklist.count({ where: { userId } });
@@ -104,6 +146,15 @@ export async function GET(request: NextRequest) {
         skip,
         take,
       });
+
+      // Early exit if no records
+      if (blacklistRecords.length === 0) {
+        return NextResponse.json({
+          movies: [],
+          hasMore: false,
+          totalCount: 0,
+        });
+      }
 
       // Get ratings
       const tmdbIds = blacklistRecords.map(r => r.tmdbId);
@@ -126,7 +177,7 @@ export async function GET(request: NextRequest) {
       );
 
       // Filter movies
-      const filteredMovies = moviesWithDetails.filter(({ tmdbData, isAnime }) => {
+      const filteredMovies = moviesWithDetails.filter(({ record, tmdbData, isAnime }) => {
         if (!tmdbData) return false;
 
         // Type filter
@@ -134,9 +185,9 @@ export async function GET(request: NextRequest) {
           const types = typesParam.split(',');
           if (isAnime) {
             if (!types.includes('anime')) return false;
-          } else if (tmdbData.media_type === 'movie') {
+          } else if (record.mediaType === 'movie') {
             if (!types.includes('movie')) return false;
-          } else if (tmdbData.media_type === 'tv') {
+          } else if (record.mediaType === 'tv') {
             if (!types.includes('tv')) return false;
           }
         }
@@ -186,13 +237,18 @@ export async function GET(request: NextRequest) {
       // Sort movies
       const sortedMovies = sortMovies(movies, sortBy, sortOrder);
 
-      const hasMore = skip + ITEMS_PER_PAGE < totalCount;
-      const resultMovies = sortedMovies.slice(0, limit);
+      // Paginate filtered results
+      const pageStartIndex = (page - 1) * limit;
+      const pageEndIndex = pageStartIndex + limit;
+      const paginatedMovies = sortedMovies.slice(pageStartIndex, pageEndIndex);
+      
+      // hasMore: true if more movies in sorted list OR if we loaded full batch (might be more in DB)
+      const hasMore = sortedMovies.length > pageEndIndex || blacklistRecords.length === take;
 
       return NextResponse.json({
-        movies: resultMovies,
+        movies: paginatedMovies,
         hasMore,
-        totalCount,
+        totalCount: sortedMovies.length,
       });
     }
 
@@ -200,9 +256,12 @@ export async function GET(request: NextRequest) {
     // First count total
     const totalCount = await prisma.watchList.count({ where: whereClause });
 
-    // Get paginated records from database
-    const skip = (page - 1) * limit;
-    const take = limit + 1;
+    // Smart pagination: load enough to fill current page even with filtering
+    // We need: (page * limit) + buffer for filtering losses + 1 to detect hasMore
+    // But cap at 500 for performance
+    const recordsNeeded = Math.ceil(page * limit * 1.5) + 1; // 50% buffer + 1
+    const skip = 0; // Always from beginning for deterministic results
+    const take = Math.min(recordsNeeded, 500); // Max 500
 
     const watchListRecords = await prisma.watchList.findMany({
       where: whereClause,
@@ -213,7 +272,7 @@ export async function GET(request: NextRequest) {
         title: true,
         voteAverage: true,
         userRating: true,
-        weightedRating: true, // Добавляем взвешенную оценку
+        weightedRating: true,
         addedAt: true,
         statusId: true,
         tags: { select: { id: true, name: true } },
@@ -223,14 +282,22 @@ export async function GET(request: NextRequest) {
       take,
     });
 
-    // Get ratings for current page only
+    // Early exit if no records
+    if (watchListRecords.length === 0) {
+      return NextResponse.json({
+        movies: [],
+        hasMore: false,
+        totalCount: 0,
+      });
+    }
+
+    // Fetch all ratings and TMDB data
     const tmdbIds = watchListRecords.map(r => r.tmdbId);
     const ratingsMap = await fetchCineChanceRatings(tmdbIds);
 
-    // Fetch TMDB data for current page
+    // Fetch TMDB data
     const moviesWithDetails = await Promise.all(
       watchListRecords.map(async (record) => {
-        // ИСПРАВЛЕНИЕ 2: Добавлено "as 'movie' | 'tv'"
         const tmdbData = await fetchMediaDetails(record.tmdbId, record.mediaType as 'movie' | 'tv');
         const cineChanceData = ratingsMap.get(record.tmdbId);
 
@@ -244,7 +311,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Filter movies
-    const filteredMovies = moviesWithDetails.filter(({ tmdbData, isAnime }) => {
+    const filteredMovies = moviesWithDetails.filter(({ record, tmdbData, isAnime }) => {
       if (!tmdbData) return false;
 
       // Type filter
@@ -252,9 +319,9 @@ export async function GET(request: NextRequest) {
         const types = typesParam.split(',');
         if (isAnime) {
           if (!types.includes('anime')) return false;
-        } else if (tmdbData.media_type === 'movie') {
+        } else if (record.mediaType === 'movie') {
           if (!types.includes('movie')) return false;
-        } else if (tmdbData.media_type === 'tv') {
+        } else if (record.mediaType === 'tv') {
           if (!types.includes('tv')) return false;
         }
       }
@@ -265,23 +332,21 @@ export async function GET(request: NextRequest) {
       if (yearTo && parseInt(releaseYear) > parseInt(yearTo)) return false;
 
       // Rating filter - use userRating from watchList
-      const userRating = watchListRecords.find(r => r.tmdbId === tmdbData.id)?.userRating ?? 0;
-      if (userRating < minRating || userRating > maxRating) return false;
+      const userRating = watchListRecords.find(r => r.tmdbId === tmdbData.id)?.userRating;
+      // Only apply rating filter if userRating is not null
+      if (userRating !== null && userRating !== undefined) {
+        if (userRating < minRating || userRating > maxRating) return false;
+      }
 
       // Genre filter
       if (genresParam) {
         const genreIds = genresParam.split(',').map(Number);
-        const hasMatchingGenre = tmdbData.genres?.some((g: any) => genreIds.includes(g.id));
+        const movieGenres = tmdbData.genres?.map((g: any) => g.id) || [];
+        const hasMatchingGenre = genreIds.some(genreId => movieGenres.includes(genreId));
         if (!hasMatchingGenre) return false;
       }
 
-      // Tags filter - we need to fetch tags for this, simplified for now
-      if (tagsParam) {
-        const tagIds = tagsParam.split(',');
-        const movieTagIds = watchListRecords.find(r => r.tmdbId === tmdbData.id)?.tags?.map(t => t.id) || [];
-        const hasMatchingTag = tagIds.some(tagId => movieTagIds.includes(tagId));
-        if (!hasMatchingTag) return false;
-      }
+      // Tags filter is now handled at DB level via Prisma WHERE clause, no need to filter in memory
 
       return true;
     });
@@ -324,21 +389,18 @@ export async function GET(request: NextRequest) {
     // Sort movies
     const sortedMovies = sortMovies(movies, sortBy, sortOrder);
 
-    const hasMore = skip + ITEMS_PER_PAGE < totalCount;
-    const resultMovies = sortedMovies.slice(0, limit);
+    // Paginate the filtered and sorted results
+    const pageStartIndex = (page - 1) * limit;
+    const pageEndIndex = pageStartIndex + limit;
+    const paginatedMovies = sortedMovies.slice(pageStartIndex, pageEndIndex);
+    
+    // hasMore: true if we have more movies than current page end, or if we loaded exactly 'take' records (might be more in DB)
+    const hasMore = sortedMovies.length > pageEndIndex || watchListRecords.length === take;
 
     return NextResponse.json({
-      movies: resultMovies,
+      movies: paginatedMovies,
       hasMore,
-      totalCount,
-      debug: {
-        userId,
-        statusNameParam,
-        statusIds: statusNameParam ? statusNameParam.split(',').map(name => getStatusIdByName(name)).filter(id => id !== null) : null,
-        whereClause,
-        totalCount,
-        timestamp: new Date().toISOString(),
-      }
+      totalCount: sortedMovies.length,
     });
   } catch (error) {
     console.error('Error fetching my movies:', error);

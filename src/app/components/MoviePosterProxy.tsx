@@ -1,7 +1,7 @@
 // src/app/components/MoviePosterProxy.tsx
 'use client';
 
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useRef } from 'react';
 import Image from 'next/image';
 import { Media } from '@/lib/tmdb';
 import { logger } from '@/lib/logger';
@@ -38,6 +38,7 @@ const MoviePosterProxy = memo(({
   const [retryCount, setRetryCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [showSlowLoadingWarning, setShowSlowLoadingWarning] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // При изменении movie сбрасываем все состояния загрузки
   useEffect(() => {
@@ -48,18 +49,46 @@ const MoviePosterProxy = memo(({
     setShowSlowLoadingWarning(false);
   }, [movie.id, movie.poster_path]);
 
+  // Проверяем если изображение уже загруженно в браузер кэш
+  useEffect(() => {
+    const checkBrowserCache = () => {
+      if (!containerRef.current || imageLoaded) return;
+      
+      const img = containerRef.current.querySelector('img') as HTMLImageElement | null;
+      if (!img) return;
+
+      // Проверяем если изображение уже полностью загружено (в браузерном кэше)
+      if (img.complete && img.naturalHeight > 0) {
+        console.log('Image fully loaded from browser cache:', movie.id, {
+          complete: img.complete,
+          naturalHeight: img.naturalHeight,
+          currentSrc: img.currentSrc?.substring(0, 50)
+        });
+        
+        // Принудительно устанавливаем loaded state для кэшированных изображений
+        handleImageLoad();
+      }
+    };
+
+    // Проверяем дважды - сразу и через небольшую задержку для гарантии
+    checkBrowserCache();
+    const timer = setTimeout(checkBrowserCache, 50);
+    return () => clearTimeout(timer);
+  }, [movie.id, imageLoaded]);
+
   // Показываем предупреждение о медленной загрузке через 3 секунды
   useEffect(() => {
     if (!isLoading) return;
     
     const timer = setTimeout(() => {
       if (isLoading && !imageLoaded) {
+        console.log('Slow loading warning for:', movie.id, 'retryCount:', retryCount);
         setShowSlowLoadingWarning(true);
       }
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [isLoading, imageLoaded]);
+  }, [isLoading, imageLoaded, movie.id, retryCount]);
 
   const handlePosterError = () => {
     logger.warn('Poster load failed (proxy), trying next source', { 
@@ -68,16 +97,21 @@ const MoviePosterProxy = memo(({
     });
     
     if (retryCount < 1) { // Уменьшили количество попыток для скорости
+      // Сбрасываем imageLoaded перед retry, но продолжаем с isLoading для отслеживания новой попытки
+      setImageLoaded(false);
+      setShowSlowLoadingWarning(false);
       setRetryCount(prev => prev + 1);
     } else {
       logger.warn('All poster attempts failed (proxy), showing placeholder', { tmdbId: movie.id });
       setImageError(true);
       setIsLoading(false);
+      setShowSlowLoadingWarning(false);
       onError?.();
     }
   };
 
   const handleImageLoad = () => {
+    console.log('Image onLoad fired:', movie.id, { retryCount });
     setImageLoaded(true);
     setIsLoading(false);
     setShowSlowLoadingWarning(false);
@@ -95,13 +129,21 @@ const MoviePosterProxy = memo(({
     // Добавляем timestamp только при retry
     const timestamp = retryCount > 0 ? `&t=${Date.now()}` : '';
     
-    return `/api/image-proxy?url=${encodeURIComponent(tmdbUrl)}${timestamp}`;
+    // Передаем tmdbId и mediaType для использования FANART_TV как fallback
+    const params = new URLSearchParams({
+      url: tmdbUrl,
+      tmdbId: String(movie.id),
+      mediaType: movie.media_type || 'movie',
+    });
+    
+    return `/api/image-proxy?${params}${timestamp}`;
   };
 
   const imageUrl = imageError ? '/placeholder-poster.svg' : getProxyUrl();
 
   return (
     <div
+      ref={containerRef}
       className={`relative w-full aspect-[2/3] bg-gradient-to-br from-gray-800 to-gray-900 rounded-none overflow-hidden shadow-lg transition-all duration-300 ${
         restoreView || isBlacklisted
           ? 'opacity-60 grayscale hover:opacity-80 hover:grayscale-0'
