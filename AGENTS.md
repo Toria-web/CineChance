@@ -262,3 +262,64 @@ Key models in `prisma/schema.prisma`:
 - See `.github/copilot-instructions.md` for detailed architecture and workflow guidance
 - Check `docs/` folder for project-specific documentation
 - Use `context7` tool to verify external library documentation when needed
+
+---
+
+## Error Handling and Documentation Guidelines
+
+### Bug Fixing Protocol (when user starts with "Bug")
+When user starts a prompt with "Bug", follow this mandatory protocol:
+
+1. **STOP and analyze**: Do not write code immediately
+2. **Search local docs**: Check `docs/bugs/` for similar issues
+3. **Use context7**: Verify solutions in official library documentation
+4. **Identify root cause**: Understand the actual problem
+5. **Implement fix**: Make the necessary changes
+6. **Document fix**: Create `docs/bugs/YYYY-MM-DD-short-description.md`
+7. **Update README**: Add summary to `docs/bugs/README.md`
+
+### MANDATORY: Before Writing Any Code
+1. **Search local docs FIRST**: Always check `docs/` and `docs/bugs/` for project-specific solutions
+2. **Use context7**: Always verify APIs, libraries, and best practices with context7 tool
+3. **NEVER rely on internal knowledge** for external libraries - always verify with context7
+
+### Analyzing Errors
+When you encounter an error or bug:
+1. **Search local docs first**: Check `docs/` and `docs/bugs/` for similar issues
+2. **Use context7**: Verify solutions in official library documentation
+3. **Check existing bugs**: Look in `docs/bugs/` for patterns
+
+### Fixing and Documenting
+After a fix is confirmed:
+1. Create a new markdown file in `docs/bugs/` with format `YYYY-MM-DD-short-error-description.md`
+2. Document structure:
+   - **Description**: Error text and context
+   - **Solution**: Step-by-step code or settings that fixed it
+   - **Prevention**: Recommendations to prevent recurrence
+3. Update `docs/bugs/README.md` with summary if needed
+
+### Documentation Cleanup Policy
+- **Don't create files for one-off tests**: Add data to existing files instead
+- **Don't duplicate**: Add new performance/error data to existing files (`docs/performance.md` or `docs/bugs/README.md`)
+- **Remove outdated docs**: If a docs file is clearly outdated, suggest deleting it after saving important findings to main README
+
+### Context Priority (MANDATORY ORDER)
+**You MUST follow this order for EVERY task:**
+
+1. **L1 - Local context**: Check current file, imports, folder structure
+2. **L2 - Local knowledge base**: Search `docs/` and `docs/bugs/` for project-specific solutions - **ALWAYS DO THIS FIRST**
+3. **L3 - External expertise**: Use `context7` tool to verify APIs and libraries - **ALWAYS DO THIS when using external libraries**
+
+### Using Context7 - MANDATORY
+Context7 MCP is configured and enabled. **YOU MUST use context7 automatically** in these cases:
+- When writing code that uses external libraries (React, Next.js, Prisma, etc.)
+- When unsure about API methods or parameters
+- When setting up configuration
+- When the user asks about library usage
+
+**DO NOT rely on your internal knowledge** - always use context7 to get current, accurate information.
+
+### Important Notes
+- If local docs contradict context7, local takes priority (our project is the source of truth)
+- Don't copy-paste from context7 - synthesize: "According to official docs [Link], method X changed, so we need to update line Y in file Z"
+- After each solution, use context7 to check for better approaches and suggest updating docs/

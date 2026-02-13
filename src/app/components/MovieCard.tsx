@@ -117,6 +117,35 @@ export default function MovieCard({
     });
   }, [movie.vote_average, movie.vote_count, cineChanceRating, cineChanceVoteCount]);
 
+  // Загрузка CineChance рейтинга при монтировании компонента
+  useEffect(() => {
+    if (!movie.id || !movie.media_type) return;
+
+    const fetchCineChanceRating = async () => {
+      try {
+        const res = await fetch(`/api/cine-chance-rating?tmdbId=${movie.id}&mediaType=${movie.media_type}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.averageRating !== undefined) {
+            setCineChanceRating(data.averageRating);
+          }
+          if (data.count !== undefined) {
+            setCineChanceVoteCount(data.count);
+          }
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error('Failed to fetch CineChance rating', {
+          tmdbId: movie.id,
+          mediaType: movie.media_type,
+          error: errorMessage
+        });
+      }
+    };
+
+    fetchCineChanceRating();
+  }, [movie.id, movie.media_type]);
+
   useEffect(() => {
     if (restoreView) {
       setIsBlacklisted(true); 
