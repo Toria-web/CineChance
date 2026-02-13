@@ -74,7 +74,15 @@ export async function invalidateCache(pattern: string): Promise<void> {
   if (!redis) return;
   
   try {
-    const keys = await redis.keys(pattern);
+    const keys: string[] = [];
+    let cursor = '0';
+    
+    do {
+      const [newCursor, batch] = await redis.scan(cursor, { match: pattern, count: 100 });
+      cursor = newCursor;
+      keys.push(...batch);
+    } while (cursor !== '0');
+    
     if (keys.length > 0) {
       await redis.del(...keys);
       logger.info(`Cache invalidated: ${keys.length} keys matching "${pattern}"`, {
