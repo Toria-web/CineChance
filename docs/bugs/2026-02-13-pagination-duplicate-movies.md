@@ -1,53 +1,57 @@
 # Bug Fix: Пагинация дублирует фильмы
 
 ## Описание
-При пагинации на странице "Мои фильмы" происходило дублирование уже загруженных фильмов.
+При пагинации на странице "Мои фильмы" происходило дублирование уже загруженных фильмов в бесконечном цикле.
 
 ## Root Cause
-Согласно документации Prisma, при использовании `orderBy` по полю с неуникальными значениями (например, `addedAt` - дата добавления может быть одинаковой для нескольких фильмов), происходит неконсистентная сортировка. Это приводит к тому, что одни и те же записи могут появляться на разных страницах.
+В `api/my-movies/route.ts` была сломана логика пагинации:
+```typescript
+// БЫЛО (строка 262-263):
+const recordsNeeded = Math.ceil(page * limit * 1.5) + 1;
+const skip = 0; // Always from beginning for deterministic results
+```
+
+Проблемы:
+1. `skip = 0` ВСЕГДА - означало что каждая страница загружала данные с начала
+2. `take` увеличивался с каждой страницей (31, 61, 91...), но данные всегда брались с начала
+3. JavaScript сортировка (`sortMovies`) отличалась от БД сортировки (`orderBy: addedAt, id`)
+4. Это приводило к тому, что срез `sortedMovies.slice(pageStart, pageEnd)` возвращал те же данные
+
+Также, согласно документации использовании `order Prisma, приBy` по полю с неуникальными значениями происходит неконсистентная сортировка.
 
 **Источник:** [Prisma GitHub Issue #23615](https://github.com/prisma/prisma/issues/23615)
 
 ## Решение
-Добавлен `id` как вторичный критерий сортировки для обеспечения стабильного порядка:
-
+1. Исправлена пагинация:
 ```typescript
-// Было
-orderBy: { addedAt: 'desc' }
+// СТАЛО:
+const skip = (page - 1) * limit;
+const take = limit + 1; // +1 to detect hasMore
+```
 
-// Стало  
+2. Добавлен `id` как вторичный критерий сортировки для стабильного порядка:
+```typescript
 orderBy: [{ addedAt: 'desc' }, { id: 'desc' }]
 ```
 
-Также добавлен secondary sort в JavaScript функции сортировки:
-```typescript
-if (comparison === 0) {
-  comparison = a.id - b.id;
-}
-```
+3. Добавлен secondary sort в JavaScript функции сортировки.
 
 ## Исправленные файлы
 
-1. **`src/app/my-movies/actions.ts`**
-   - WatchList query (строка 125): добавлен `id` в orderBy
-   - Blacklist query (строка 190): добавлен `id` в orderBy
-   - Исправлен `hasMore` calculation (строка 109): использовался `ITEMS_PER_PAGE` вместо переданного `limit`
-   - `sortMoviesOnServer` (строки 275-277): добавлен secondary sort по id
+1. **`src/app/api/my-movies/route.ts`**
+   - Исправлена логика пагинации (skip/take)
+   - Blacklist query: добавлен `id` в orderBy
+   - `sortMovies`: добавлен secondary sort по id
 
-2. **`src/app/api/my-movies/route.ts`**
-   - WatchList query (строка 280): добавлен `id` в orderBy
-   - Blacklist query (строка 145): добавлен `id` в orderBy
-   - `sortMovies` (строки 440-442): добавлен secondary sort по id
+2. **`src/app/my-movies/actions.ts`**
+   - WatchList query: добавлен `id` в orderBy
+   - Blacklist query: добавлен `id` в orderBy
+   - Исправлен `hasMore` calculation
+   - `sortMoviesOnServer`: добавлен secondary sort по id
 
 ## Prevention
-Все future запросы с пагинацией должны использовать множественный `orderBy`:
+Все future запросы с пагинацией должны использовать правильный skip:
 ```typescript
-orderBy: [{ field1: 'desc' }, { id: 'desc' }]
-```
-
-При JavaScript сортировке всегда добавлять:
-```typescript
-if (comparison === 0) {
-  comparison = a.id - b.id;
-}
+const skip = (page - 1) * limit;
+const take = limit + 1;
 ```

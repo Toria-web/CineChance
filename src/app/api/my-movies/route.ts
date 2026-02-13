@@ -257,11 +257,9 @@ export async function GET(request: NextRequest) {
     const totalCount = await prisma.watchList.count({ where: whereClause });
 
     // Smart pagination: load enough to fill current page even with filtering
-    // We need: (page * limit) + buffer for filtering losses + 1 to detect hasMore
-    // But cap at 500 for performance
-    const recordsNeeded = Math.ceil(page * limit * 1.5) + 1; // 50% buffer + 1
-    const skip = 0; // Always from beginning for deterministic results
-    const take = Math.min(recordsNeeded, 500); // Max 500
+    // Use proper skip for correct pagination
+    const skip = (page - 1) * limit;
+    const take = limit + 1; // +1 to detect hasMore
 
     const watchListRecords = await prisma.watchList.findMany({
       where: whereClause,
